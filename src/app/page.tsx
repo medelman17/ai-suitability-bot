@@ -15,6 +15,7 @@ import {
   AlternativesPanel,
   ActionChecklist,
   ScreeningLoader,
+  PDFExportButton,
   Button,
   Card,
   Container,
@@ -412,10 +413,14 @@ export default function Home() {
                     </ScrollReveal>
                   )}
 
-                  {/* Reset Button */}
-                  {phase === 'complete' && (
+                  {/* Action Buttons */}
+                  {phase === 'complete' && evaluation && (
                     <ScrollReveal direction="up" delay={0.35}>
-                      <div className="flex justify-center pt-4">
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+                        <PDFExportButton
+                          problem={problem}
+                          evaluation={evaluation}
+                        />
                         <Button
                           variant="secondary"
                           size="lg"
