@@ -60,3 +60,31 @@ export {
   ContentLayout,
   Footer,
 } from './container';
+
+// Page Transitions
+export {
+  PageTransition,
+  PhaseTransition,
+  StaggerContainer,
+  StaggerItem,
+  PresenceAnimation,
+} from './page-transition';
+
+// Celebration & Effects
+export {
+  Confetti,
+  CelebrationBurst,
+  SuccessCheckmark,
+  PulseRings,
+  Sparkles,
+} from './confetti';
+
+// Scroll Animations
+export {
+  ScrollReveal,
+  ScrollRevealGroup,
+  ScrollRevealItem,
+  Parallax,
+  AnimatedCounter,
+  TextReveal,
+} from './scroll-reveal';
