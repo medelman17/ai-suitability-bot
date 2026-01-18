@@ -115,6 +115,12 @@ function DimensionCard({
   }
 
   const config = SCORE_CONFIG[dimension.score];
+
+  // Guard against invalid score values during streaming
+  if (!config) {
+    return null;
+  }
+
   const Icon = config.icon;
 
   return (

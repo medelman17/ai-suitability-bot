@@ -96,7 +96,7 @@ function AlternativeCard({ alternative, index }: { alternative: PartialAlternati
         {/* Header */}
         <div className="flex items-start justify-between gap-3 sm:gap-4 mb-4">
           <div className="flex items-start gap-3">
-            {alternative.type && (
+            {alternative.type && typeConfig[alternative.type] && (
               <div className={`w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0 rounded-xl bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center ${typeConfig[alternative.type].color}`}>
                 {typeConfig[alternative.type].icon}
               </div>
@@ -106,12 +106,12 @@ function AlternativeCard({ alternative, index }: { alternative: PartialAlternati
                 {alternative.name}
               </h4>
               <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 flex-wrap">
-                {alternative.type && (
+                {alternative.type && typeConfig[alternative.type] && (
                   <Badge variant="primary" size="sm">
                     {typeConfig[alternative.type].label}
                   </Badge>
                 )}
-                {alternative.estimatedEffort && (
+                {alternative.estimatedEffort && effortConfig[alternative.estimatedEffort] && (
                   <Badge variant={effortConfig[alternative.estimatedEffort].variant} size="sm">
                     {effortConfig[alternative.estimatedEffort].label}
                   </Badge>
