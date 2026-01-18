@@ -177,7 +177,7 @@ function RiskFactorsSection({ factors }: { factors: PartialRiskFactor[] }) {
                 <p className="font-medium text-amber-900 dark:text-amber-100">
                   {r.risk}
                 </p>
-                {r.severity && (
+                {r.severity && severityConfig[r.severity] && (
                   <Badge variant={severityConfig[r.severity].badge} size="sm">
                     {severityConfig[r.severity].label}
                   </Badge>

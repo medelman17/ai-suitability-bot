@@ -214,14 +214,16 @@ export function VerdictDisplay({
   summary,
   isStreaming,
 }: VerdictDisplayProps) {
-  const config = VERDICT_CONFIG[verdict];
-  const Icon = config.icon;
-
-  // Trigger celebration on mount for STRONG_FIT verdicts
+  // Hooks must be called unconditionally at the top
   const [showCelebration, setShowCelebration] = useState(false);
   const [showPulse, setShowPulse] = useState(false);
 
+  const config = VERDICT_CONFIG[verdict];
+
   useEffect(() => {
+    // Only trigger effects if we have a valid config
+    if (!config) return;
+
     // Small delay before triggering effects
     const timer = setTimeout(() => {
       setShowPulse(true);
@@ -231,7 +233,14 @@ export function VerdictDisplay({
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [verdict]);
+  }, [verdict, config]);
+
+  // Guard against invalid verdict values during streaming
+  if (!config) {
+    return <VerdictSkeleton />;
+  }
+
+  const Icon = config.icon;
 
   return (
     <>
