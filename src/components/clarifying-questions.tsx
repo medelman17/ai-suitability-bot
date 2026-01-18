@@ -1,7 +1,21 @@
 'use client';
 
-import { ArrowRight, Loader2, MessageCircleQuestion } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ArrowRight,
+  Loader2,
+  MessageCircleQuestion,
+  Lightbulb,
+  Check,
+} from 'lucide-react';
 import type { ClarifyingQuestion } from '@/lib/schemas';
+import { Card } from './ui/card';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 interface ClarifyingQuestionsProps {
   questions: ClarifyingQuestion[];
@@ -12,115 +26,309 @@ interface ClarifyingQuestionsProps {
   isLoading: boolean;
 }
 
+// ============================================================================
+// INSIGHT CARD
+// ============================================================================
+
+function InsightsCard({ insights }: { insights: string[] }) {
+  if (insights.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+    >
+      <Card
+        variant="ghost"
+        padding="md"
+        className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
+            <Lightbulb className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-indigo-900 dark:text-indigo-300 mb-2">
+              What we can already infer
+            </h3>
+            <ul className="space-y-1.5">
+              {insights.map((insight, i) => (
+                <motion.li
+                  key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 + i * 0.1 }}
+                  className="text-sm text-indigo-700 dark:text-indigo-300 flex items-start gap-2"
+                >
+                  <span className="text-indigo-400 mt-1.5 flex-shrink-0">
+                    <div className="w-1 h-1 rounded-full bg-current" />
+                  </span>
+                  {insight}
+                </motion.li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// OPTION CARD (for multiple choice)
+// ============================================================================
+
+function OptionCard({
+  option,
+  isSelected,
+  onSelect,
+}: {
+  option: { value: string; label: string };
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onSelect}
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
+      className={`
+        w-full text-left p-4 min-h-[56px] rounded-xl border-2 transition-all duration-200
+        active:scale-[0.99]
+        ${
+          isSelected
+            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 shadow-sm'
+            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+        }
+      `}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={`
+            w-6 h-6 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all
+            ${
+              isSelected
+                ? 'border-indigo-500 bg-indigo-500'
+                : 'border-slate-300 dark:border-slate-600'
+            }
+          `}
+        >
+          {isSelected && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 500 }}
+            >
+              <Check className="w-3.5 h-3.5 text-white" />
+            </motion.div>
+          )}
+        </div>
+        <span
+          className={`
+            font-medium text-base
+            ${
+              isSelected
+                ? 'text-indigo-900 dark:text-indigo-200'
+                : 'text-slate-700 dark:text-slate-300'
+            }
+          `}
+        >
+          {option.label}
+        </span>
+      </div>
+    </motion.button>
+  );
+}
+
+// ============================================================================
+// QUESTION CARD
+// ============================================================================
+
+function QuestionCard({
+  question,
+  index,
+  answer,
+  onAnswer,
+}: {
+  question: ClarifyingQuestion;
+  index: number;
+  answer: string | undefined;
+  onAnswer: (value: string) => void;
+}) {
+  const isAnswered = !!answer;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 + index * 0.15 }}
+    >
+      <Card
+        variant="default"
+        padding="lg"
+        className={`
+          transition-all duration-300
+          ${isAnswered ? 'border-emerald-200 dark:border-emerald-800' : ''}
+        `}
+      >
+        {/* Question header */}
+        <div className="flex items-start gap-3 sm:gap-4 mb-4 sm:mb-5">
+          <div
+            className={`
+              flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-sm
+              transition-all duration-300
+              ${
+                isAnswered
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'
+              }
+            `}
+          >
+            {isAnswered ? <Check className="w-4 h-4" /> : index + 1}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-white text-base sm:text-lg">
+              {question.question}
+            </p>
+            {question.rationale && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 sm:mt-1.5">
+                {question.rationale}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Options or text input - responsive margin */}
+        {question.options ? (
+          <div className="space-y-2 sm:space-y-3 ml-0 sm:ml-12">
+            {question.options.map((option) => (
+              <OptionCard
+                key={option.value}
+                option={option}
+                isSelected={answer === option.value}
+                onSelect={() => onAnswer(option.value)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="ml-0 sm:ml-12">
+            <textarea
+              value={answer || ''}
+              onChange={(e) => onAnswer(e.target.value)}
+              placeholder="Enter your answer..."
+              className={`
+                w-full h-28 p-4
+                text-base
+                bg-slate-50 dark:bg-slate-800
+                border-2 border-slate-200 dark:border-slate-700
+                rounded-xl resize-none
+                text-slate-900 dark:text-white
+                placeholder:text-slate-400 dark:placeholder:text-slate-500
+                focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500
+                transition-all duration-200
+              `}
+              aria-label={`Answer for: ${question.question}`}
+            />
+          </div>
+        )}
+      </Card>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
 export function ClarifyingQuestions({
   questions,
   answers,
   partialInsights,
   onAnswer,
   onSubmit,
-  isLoading
+  isLoading,
 }: ClarifyingQuestionsProps) {
-  const allAnswered = questions.every(q => answers[q.id]);
+  const answeredCount = questions.filter((q) => answers[q.id]).length;
+  const allAnswered = answeredCount === questions.length;
+  const progress = (answeredCount / questions.length) * 100;
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 bg-blue-100 rounded-lg">
-          <MessageCircleQuestion className="w-6 h-6 text-blue-700" />
+    <div className="w-full max-w-3xl mx-auto px-1">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 sm:mb-8"
+      >
+        <div className="flex items-start sm:items-center gap-3 sm:gap-4 mb-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <MessageCircleQuestion className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+              A few clarifying questions
+            </h2>
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
+              Your answers will help provide a more accurate assessment.
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            A few clarifying questions
-          </h2>
-          <p className="text-sm text-gray-600">
-            Your answers will help provide a more accurate assessment.
-          </p>
+
+        {/* Progress bar */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.3 }}
+            />
+          </div>
+          <Badge variant={allAnswered ? 'success' : 'default'} size="sm">
+            {answeredCount}/{questions.length}
+          </Badge>
         </div>
+      </motion.div>
+
+      {/* Insights */}
+      <div className="mb-4 sm:mb-6">
+        <InsightsCard insights={partialInsights} />
       </div>
 
-      {partialInsights.length > 0 && (
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-sm font-medium text-gray-700 mb-2">What we can already infer:</p>
-          <ul className="space-y-1">
-            {partialInsights.map((insight, i) => (
-              <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                <span className="text-gray-400 mt-1">•</span>
-                {insight}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="space-y-6">
+      {/* Questions */}
+      <div className="space-y-4 mb-6 sm:mb-8">
         {questions.map((q, index) => (
-          <div key={q.id} className="bg-white rounded-lg border border-gray-200 p-5">
-            <div className="flex items-start gap-3 mb-4">
-              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-900 text-white text-sm font-medium flex items-center justify-center">
-                {index + 1}
-              </span>
-              <div>
-                <p className="font-medium text-gray-900">{q.question}</p>
-                <p className="text-sm text-gray-500 mt-1">{q.rationale}</p>
-              </div>
-            </div>
-
-            {q.options ? (
-              <div className="ml-10 space-y-2">
-                {q.options.map((option) => (
-                  <label
-                    key={option.value}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      answers[q.id] === option.value
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name={q.id}
-                      value={option.value}
-                      checked={answers[q.id] === option.value}
-                      onChange={() => onAnswer(q.id, option.value)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-gray-700">{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <div className="ml-10">
-                <textarea
-                  value={answers[q.id] || ''}
-                  onChange={(e) => onAnswer(q.id, e.target.value)}
-                  placeholder="Enter your answer..."
-                  className="w-full h-24 p-3 text-gray-900 bg-gray-50 border border-gray-200 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            )}
-          </div>
+          <QuestionCard
+            key={q.id}
+            question={q}
+            index={index}
+            answer={answers[q.id]}
+            onAnswer={(value) => onAnswer(q.id, value)}
+          />
         ))}
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <button
+      {/* Submit button - full width on mobile */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="flex justify-center sm:justify-end"
+      >
+        <Button
           onClick={onSubmit}
           disabled={!allAnswered || isLoading}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-blue-900 text-white font-medium rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          isLoading={isLoading}
+          size="lg"
+          fullWidth
+          className="sm:w-auto"
+          rightIcon={!isLoading && <ArrowRight className="w-5 h-5" />}
         >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Evaluating...
-            </>
-          ) : (
-            <>
-              Get Full Assessment
-              <ArrowRight className="w-4 h-4" />
-            </>
-          )}
-        </button>
-      </div>
+          {isLoading ? 'Evaluating...' : 'Get Full Assessment'}
+        </Button>
+      </motion.div>
     </div>
   );
 }

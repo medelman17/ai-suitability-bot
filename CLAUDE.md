@@ -67,6 +67,28 @@ The tool is designed to say "no" when appropriate - a high rate of non-recommend
 - `src/hooks/use-screener.ts` - Main state orchestration
 - `src/app/api/evaluate/route.ts` - Streaming evaluation endpoint (edge runtime)
 
+## UI Development
+
+This app uses a **mobile-first design system**. Before creating or modifying UI components, review:
+
+- `CLAUDE-UI-GUIDE.md` - Comprehensive design system documentation
+
+### Available UI Skills
+
+Use these slash commands for UI work:
+
+- `/create-ui-component` - Step-by-step guide for creating new components
+- `/audit-ui` - Checklist and patterns for auditing existing components
+- `/mobile-polish` - Transformation patterns for mobile optimization
+
+### Critical UI Requirements
+
+1. **44px minimum touch targets** on all interactive elements
+2. **Mobile-first layouts**: Use `flex-col sm:flex-row`, not `flex-row`
+3. **Dark mode support**: Every color needs a `dark:` variant
+4. **Responsive typography**: `text-xl sm:text-2xl`, `text-base sm:text-lg`
+5. **Partial data handling**: Filter undefined values for streaming components
+
 <!-- BACKLOG.MD MCP GUIDELINES START -->
 
 <CRITICAL_INSTRUCTION>
