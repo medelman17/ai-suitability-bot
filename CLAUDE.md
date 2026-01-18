@@ -13,8 +13,9 @@ npm run lint     # ESLint
 ## Environment
 
 Required in `.env.local`:
-- `ANTHROPIC_API_KEY` - Claude Sonnet 4 API key
-- `AI_GATEWAY_URL` - Vercel AI Gateway URL (for caching, rate limiting, analytics)
+- `AI_GATEWAY_API_KEY` - Vercel AI Gateway API key (from Vercel dashboard)
+
+AI SDK v6 automatically routes `'provider/model'` strings through the gateway.
 
 ## Architecture
 

@@ -32,12 +32,13 @@ Open [http://localhost:3000](http://localhost:3000) to use the screener.
 
 ## Environment Variables
 
-Create `.env.local` with:
+Create `.env.local` with your Vercel AI Gateway key:
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...      # Required: Claude API key
-AI_GATEWAY_URL=...                 # Optional: Vercel AI Gateway URL
+AI_GATEWAY_API_KEY=your-gateway-api-key
 ```
+
+Get this from your [Vercel AI Gateway dashboard](https://vercel.com/dashboard). AI SDK v6 automatically routes requests through the gateway when using `'provider/model'` strings.
 
 ## How It Works
 
