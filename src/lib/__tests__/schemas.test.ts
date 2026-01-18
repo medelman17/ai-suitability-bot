@@ -81,7 +81,7 @@ describe('DimensionScoreSchema', () => {
       [true, 'boolean'],
       [{}, 'object'],
       [[], 'array'],
-    ])('rejects %s (%s)', (value) => {
+    ])('rejects %s (%s)', (value, _description) => {
       expect(() => DimensionScoreSchema.parse(value)).toThrow()
     })
   })
@@ -117,7 +117,7 @@ describe('VerdictSchema', () => {
       [null, 'null'],
       [undefined, 'undefined'],
       [1, 'number'],
-    ])('rejects %s (%s)', (value) => {
+    ])('rejects %s (%s)', (value, _description) => {
       expect(() => VerdictSchema.parse(value)).toThrow()
     })
   })
