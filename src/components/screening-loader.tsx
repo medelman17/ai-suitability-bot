@@ -238,7 +238,7 @@ export function ScreeningLoader({ className = '' }: ScreeningLoaderProps) {
             transition={{ duration: 0.3 }}
             className="text-sm text-slate-600 dark:text-slate-400 italic"
           >
-            "{tips[currentTip]}"
+            &ldquo;{tips[currentTip]}&rdquo;
           </motion.p>
         </AnimatePresence>
       </div>
@@ -251,12 +251,6 @@ export function ScreeningLoader({ className = '' }: ScreeningLoaderProps) {
 // ============================================================================
 
 export function EvaluationLoader({ className = '' }: { className?: string }) {
-  const evaluationSteps = [
-    { id: 'dimensions', label: 'Evaluating across 7 dimensions', icon: Search },
-    { id: 'risks', label: 'Identifying potential risks', icon: Brain },
-    { id: 'architecture', label: 'Designing recommended approach', icon: MessageSquarePlus },
-  ];
-
   return (
     <div className={`flex flex-col items-center py-12 ${className}`}>
       <motion.div
@@ -271,7 +265,7 @@ export function EvaluationLoader({ className = '' }: { className?: string }) {
         Generating Full Evaluation
       </h3>
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-        Streaming results as they're ready...
+        Streaming results as they&apos;re ready...
       </p>
 
       <div className="flex items-center gap-2">

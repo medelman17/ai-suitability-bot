@@ -7,6 +7,7 @@ import {
   useState,
   useRef,
   useCallback,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 
@@ -17,26 +18,25 @@ import {
 /**
  * Hook to detect if the user prefers reduced motion
  * Returns true if the user has enabled reduced motion in their OS settings
+ * Uses useSyncExternalStore for React-approved external state subscription
  */
 export function useReducedMotion(): boolean {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-
-  useEffect(() => {
-    // Check if we're in the browser
-    if (typeof window === 'undefined') return;
+  const subscribe = useCallback((callback: () => void) => {
+    if (typeof window === 'undefined') return () => {};
 
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
-
-    const handleChange = (event: MediaQueryListEvent) => {
-      setPrefersReducedMotion(event.matches);
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    mediaQuery.addEventListener('change', callback);
+    return () => mediaQuery.removeEventListener('change', callback);
   }, []);
 
-  return prefersReducedMotion;
+  const getSnapshot = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }, []);
+
+  const getServerSnapshot = useCallback(() => false, []);
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
 // ============================================================================

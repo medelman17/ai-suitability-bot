@@ -179,18 +179,30 @@ interface SkeletonListProps {
   showAvatar?: boolean;
 }
 
+// Deterministic widths for skeleton items (avoids impure Math.random in render)
+const SKELETON_WIDTHS = [
+  { primary: 75, secondary: 50 },
+  { primary: 85, secondary: 45 },
+  { primary: 65, secondary: 55 },
+  { primary: 80, secondary: 48 },
+  { primary: 70, secondary: 52 },
+];
+
 export const SkeletonList = ({ count = 5, showAvatar = true }: SkeletonListProps) => {
   return (
     <div className="space-y-4" aria-hidden="true">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3">
-          {showAvatar && <SkeletonAvatar size="sm" />}
-          <div className="flex-1 space-y-2">
-            <Skeleton height={14} width={`${60 + Math.random() * 30}%`} />
-            <Skeleton height={12} width={`${40 + Math.random() * 20}%`} />
+      {Array.from({ length: count }).map((_, i) => {
+        const widths = SKELETON_WIDTHS[i % SKELETON_WIDTHS.length];
+        return (
+          <div key={i} className="flex items-center gap-3">
+            {showAvatar && <SkeletonAvatar size="sm" />}
+            <div className="flex-1 space-y-2">
+              <Skeleton height={14} width={`${widths.primary}%`} />
+              <Skeleton height={12} width={`${widths.secondary}%`} />
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };

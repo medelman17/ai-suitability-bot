@@ -6,6 +6,7 @@ import {
   type TextareaHTMLAttributes,
   type ReactNode,
   useState,
+  useId,
 } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, Check, Eye, EyeOff } from 'lucide-react';
@@ -117,7 +118,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     ref
   ) => {
     const [showPassword, setShowPassword] = useState(false);
-    const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+    const generatedId = useId();
+    const inputId = id || `input-${generatedId}`;
     const isPassword = type === 'password';
 
     const inputClassName = `
@@ -241,7 +243,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     ref
   ) => {
     const [internalValue, setInternalValue] = useState(value || '');
-    const inputId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`;
+    const generatedId = useId();
+    const inputId = id || `textarea-${generatedId}`;
 
     const currentLength = String(value ?? internalValue).length;
     const isOverLimit = maxLength ? currentLength > maxLength : false;
@@ -344,6 +347,7 @@ interface SearchInputProps extends Omit<InputProps, 'leftIcon' | 'type'> {
 }
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ({ onSearch, isSearching, ...props }, ref) => {
     return (
       <Input

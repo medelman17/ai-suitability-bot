@@ -7,7 +7,6 @@ import {
   MessageCircle,
   BarChart3,
   CheckCircle2,
-  Circle,
   Loader2,
 } from 'lucide-react';
 
@@ -245,7 +244,7 @@ export const ProgressBar = ({ currentPhase, className = '' }: ProgressSidebarPro
     <div className={`lg:hidden ${className}`}>
       {/* Step indicators - larger touch targets */}
       <div className="flex items-center justify-between mb-3 px-2">
-        {steps.map((step, index) => {
+        {steps.map((step) => {
           const status = getStepStatus(step.id, currentPhase);
           const Icon = step.icon;
 

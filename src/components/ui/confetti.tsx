@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ============================================================================
@@ -16,6 +16,10 @@ interface Particle {
   color: string;
   shape: 'circle' | 'square' | 'star';
   delay: number;
+  // Pre-computed random values for animation (to avoid impure render)
+  driftX: number;
+  driftY: number;
+  duration: number;
 }
 
 interface ConfettiProps {
@@ -100,14 +104,14 @@ function ConfettiParticle({ particle }: { particle: Particle }) {
         opacity: 1,
       }}
       animate={{
-        x: particle.x + (Math.random() - 0.5) * 200,
-        y: particle.y + Math.random() * 300 + 100,
+        x: particle.x + particle.driftX,
+        y: particle.y + particle.driftY,
         scale: particle.scale,
         rotate: particle.rotation,
         opacity: 0,
       }}
       transition={{
-        duration: 2 + Math.random(),
+        duration: particle.duration,
         delay: particle.delay,
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
@@ -133,6 +137,7 @@ export function Confetti({
 }: ConfettiProps) {
   const [particles, setParticles] = useState<Particle[]>([]);
   const [isActive, setIsActive] = useState(false);
+  const prevTriggerRef = useRef(false);
 
   const generateParticles = useCallback(() => {
     const shapes: Particle['shape'][] = ['circle', 'square', 'star'];
@@ -148,23 +153,41 @@ export function Confetti({
       color: colors[Math.floor(Math.random() * colors.length)],
       shape: shapes[Math.floor(Math.random() * shapes.length)],
       delay: Math.random() * 0.3,
+      // Pre-compute random values for animation
+      driftX: (Math.random() - 0.5) * 200,
+      driftY: Math.random() * 300 + 100,
+      duration: 2 + Math.random(),
     }));
   }, [particleCount, colors, spread]);
 
+  // Handle trigger changes - detect rising edge
   useEffect(() => {
-    if (trigger && !isActive) {
+    const wasTriggered = !prevTriggerRef.current && trigger;
+    prevTriggerRef.current = trigger;
+
+    if (!wasTriggered || isActive) return;
+
+    // Start animation on next frame to avoid synchronous setState
+    const frameId = requestAnimationFrame(() => {
       setIsActive(true);
       setParticles(generateParticles());
+    });
 
-      const timer = setTimeout(() => {
-        setIsActive(false);
-        setParticles([]);
-        onComplete?.();
-      }, duration);
+    return () => cancelAnimationFrame(frameId);
+  }, [trigger, isActive, generateParticles]);
 
-      return () => clearTimeout(timer);
-    }
-  }, [trigger, isActive, duration, generateParticles, onComplete]);
+  // Handle animation completion
+  useEffect(() => {
+    if (!isActive) return;
+
+    const timer = setTimeout(() => {
+      setIsActive(false);
+      setParticles([]);
+      onComplete?.();
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [isActive, duration, onComplete]);
 
   if (!isActive) return null;
 
@@ -189,20 +212,37 @@ export function CelebrationBurst({
   onComplete,
 }: CelebrationBurstProps) {
   const [isActive, setIsActive] = useState(false);
+  const prevTriggerRef = useRef(false);
 
   const colors = type === 'success' ? SUCCESS_COLORS : DEFAULT_COLORS;
   const particleCount = type === 'subtle' ? 20 : type === 'success' ? 30 : 40;
 
+  // Handle trigger changes - detect rising edge
   useEffect(() => {
-    if (trigger && !isActive) {
+    const wasTriggered = !prevTriggerRef.current && trigger;
+    prevTriggerRef.current = trigger;
+
+    if (!wasTriggered || isActive) return;
+
+    // Start animation on next frame to avoid synchronous setState
+    const frameId = requestAnimationFrame(() => {
       setIsActive(true);
-      const timer = setTimeout(() => {
-        setIsActive(false);
-        onComplete?.();
-      }, 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [trigger, isActive, onComplete]);
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [trigger, isActive]);
+
+  // Handle animation completion
+  useEffect(() => {
+    if (!isActive) return;
+
+    const timer = setTimeout(() => {
+      setIsActive(false);
+      onComplete?.();
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [isActive, onComplete]);
 
   return (
     <Confetti
@@ -343,23 +383,26 @@ interface SparkleProps {
   count?: number;
 }
 
-export function Sparkles({ show, count = 6 }: SparkleProps) {
-  const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number; delay: number }[]>([]);
+// Pre-generated sparkle positions (avoids Math.random in render and setState in effect)
+const SPARKLE_POSITIONS = [
+  { x: 15, y: 20, delay: 0.1 },
+  { x: 75, y: 10, delay: 0.25 },
+  { x: 45, y: 80, delay: 0.15 },
+  { x: 85, y: 65, delay: 0.35 },
+  { x: 25, y: 55, delay: 0.2 },
+  { x: 60, y: 35, delay: 0.4 },
+  { x: 10, y: 90, delay: 0.05 },
+  { x: 90, y: 25, delay: 0.3 },
+];
 
-  useEffect(() => {
-    if (show) {
-      setSparkles(
-        Array.from({ length: count }, (_, i) => ({
-          id: i,
-          x: Math.random() * 100,
-          y: Math.random() * 100,
-          delay: Math.random() * 0.5,
-        }))
-      );
-    } else {
-      setSparkles([]);
-    }
-  }, [show, count]);
+export function Sparkles({ show, count = 6 }: SparkleProps) {
+  // Use pre-generated positions, cycling through if count > available
+  const sparkles = show
+    ? Array.from({ length: count }, (_, i) => ({
+        id: i,
+        ...SPARKLE_POSITIONS[i % SPARKLE_POSITIONS.length],
+      }))
+    : [];
 
   return (
     <AnimatePresence>

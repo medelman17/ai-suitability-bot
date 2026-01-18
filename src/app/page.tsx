@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RotateCcw, AlertCircle, Sparkles, ArrowUp } from 'lucide-react';
 import { useScreener } from '@/hooks/use-screener';
-import { useAnnounce, getPhaseAnnouncement, useReducedMotion } from '@/lib/accessibility';
+import { useAnnounce, getPhaseAnnouncement } from '@/lib/accessibility';
 import {
   ProblemIntake,
   ClarifyingQuestions,
@@ -22,8 +22,6 @@ import {
   Header,
   ProgressBar,
   ScrollReveal,
-  StaggerContainer,
-  StaggerItem,
 } from '@/components';
 
 // ============================================================================
@@ -120,7 +118,6 @@ export default function Home() {
 
   // Accessibility hooks
   const { announce } = useAnnounce();
-  const prefersReducedMotion = useReducedMotion();
   const previousPhaseRef = useRef(phase);
 
   // Announce phase changes to screen readers
@@ -147,11 +144,6 @@ export default function Home() {
 
   // Show scroll to top on results page
   const showScrollTop = phase === 'complete' || phase === 'evaluating';
-
-  // Adjust animations for reduced motion
-  const motionProps = prefersReducedMotion
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
-    : undefined;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
