@@ -61,11 +61,38 @@ The tool is designed to say "no" when appropriate - a high rate of non-recommend
 
 ## Key Files
 
+### Core Logic
 - `src/lib/ai.ts` - Model configuration with Vercel AI Gateway
 - `src/lib/schemas.ts` - Zod schemas that enforce AI output structure
 - `src/lib/prompts.ts` - System prompts for screening and evaluation
+- `src/lib/dimensions.ts` - 7 evaluation dimension definitions
 - `src/hooks/use-screener.ts` - Main state orchestration
-- `src/app/api/evaluate/route.ts` - Streaming evaluation endpoint (edge runtime)
+
+### API Routes
+- `src/app/api/screen/route.ts` - Initial screening endpoint (non-streaming)
+- `src/app/api/evaluate/route.ts` - Full evaluation endpoint (streaming, edge runtime)
+
+### Feature Components
+- `src/components/problem-intake.tsx` - Problem description input
+- `src/components/clarifying-questions.tsx` - Dynamic question flow
+- `src/components/screening-loader.tsx` - Loading state during screening
+- `src/components/verdict-display.tsx` - Final verdict with summary
+- `src/components/dimension-breakdown.tsx` - 7-dimension scoring display
+- `src/components/analysis-detail.tsx` - Risk factors and deep analysis
+- `src/components/alternatives-panel.tsx` - Non-AI alternatives
+- `src/components/action-checklist.tsx` - Implementation next steps
+
+### UI Primitives (`src/components/ui/`)
+- `button.tsx`, `input.tsx`, `card.tsx`, `badge.tsx` - Core form elements
+- `container.tsx`, `header.tsx` - Layout components
+- `skeleton.tsx` - Loading placeholders
+- `page-transition.tsx`, `scroll-reveal.tsx` - Animation wrappers
+- `progress-sidebar.tsx` - Phase progress indicator
+- `confetti.tsx` - Celebration effect for STRONG_FIT
+
+### Design System
+- `src/lib/design-tokens.ts` - Color, spacing, typography tokens
+- `src/lib/accessibility.tsx` - Screen reader utilities, focus management
 
 ## UI Development
 
@@ -88,6 +115,61 @@ Use these slash commands for UI work:
 3. **Dark mode support**: Every color needs a `dark:` variant
 4. **Responsive typography**: `text-xl sm:text-2xl`, `text-base sm:text-lg`
 5. **Partial data handling**: Filter undefined values for streaming components
+
+## Common Patterns
+
+### Handling Streaming Data
+
+Components receive `DeepPartial<T>` during streaming. Always filter arrays:
+
+```tsx
+// Good - filter undefined elements
+{items?.filter(Boolean).map(item => <Item key={item.id} {...item} />)}
+
+// Bad - will crash on undefined
+{items?.map(item => <Item key={item.id} {...item} />)}
+```
+
+### Adding New Evaluation Dimensions
+
+1. Add dimension to `src/lib/dimensions.ts`
+2. Update `DimensionScoreSchema` in `src/lib/schemas.ts`
+3. Modify prompts in `src/lib/prompts.ts` to include new dimension
+4. Update `DimensionBreakdown` component if display logic changes
+
+### Adding New Verdict Types
+
+1. Update `VerdictSchema` enum in `src/lib/schemas.ts`
+2. Add verdict styling in `VerdictDisplay` component
+3. Update prompts to explain when to use new verdict
+
+### Animation Patterns
+
+Use Framer Motion with design tokens:
+
+```tsx
+import { motion } from 'framer-motion'
+
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3 }}
+>
+```
+
+Wrap sections with `<ScrollReveal>` for scroll-triggered animations.
+
+## Project Backlog
+
+The `backlog/tasks/` directory contains 42 planned tasks organized hierarchically:
+
+| Priority | Features |
+|----------|----------|
+| **High** | Testing infrastructure (task-1), PDF export (task-2) |
+| **Medium** | Case studies (task-3), Email capture (task-4), Comparison mode (task-5), History (task-6) |
+| **Low** | Industry presets (task-7), Cost calculator (task-8), Architecture diagrams (task-9) |
+
+Subtasks use dot notation: `task-1.1`, `task-1.2`, etc. Check existing tasks before starting new work.
 
 <!-- BACKLOG.MD MCP GUIDELINES START -->
 
