@@ -5,7 +5,6 @@
 
 // Button
 export { Button, IconButton } from './button';
-export type { } from './button';
 
 // Card
 export {
@@ -42,3 +41,22 @@ export {
   PulseLoader,
   Spinner,
 } from './skeleton';
+
+// Header
+export { Header, MinimalHeader, HeroHeader } from './header';
+
+// Progress
+export {
+  ProgressSidebar,
+  ProgressBar,
+  StepIndicator,
+} from './progress-sidebar';
+
+// Layout
+export {
+  Container,
+  PageLayout,
+  Section,
+  ContentLayout,
+  Footer,
+} from './container';
