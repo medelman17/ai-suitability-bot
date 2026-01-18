@@ -95,7 +95,8 @@ function OptionCard({
       whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
       className={`
-        w-full text-left p-4 rounded-xl border-2 transition-all duration-200
+        w-full text-left p-4 min-h-[56px] rounded-xl border-2 transition-all duration-200
+        active:scale-[0.99]
         ${
           isSelected
             ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 shadow-sm'
@@ -106,7 +107,7 @@ function OptionCard({
       <div className="flex items-center gap-3">
         <div
           className={`
-            w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all
+            w-6 h-6 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all
             ${
               isSelected
                 ? 'border-indigo-500 bg-indigo-500'
@@ -120,13 +121,13 @@ function OptionCard({
               animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 500 }}
             >
-              <Check className="w-3 h-3 text-white" />
+              <Check className="w-3.5 h-3.5 text-white" />
             </motion.div>
           )}
         </div>
         <span
           className={`
-            font-medium
+            font-medium text-base
             ${
               isSelected
                 ? 'text-indigo-900 dark:text-indigo-200'
@@ -173,7 +174,7 @@ function QuestionCard({
         `}
       >
         {/* Question header */}
-        <div className="flex items-start gap-4 mb-5">
+        <div className="flex items-start gap-3 sm:gap-4 mb-4 sm:mb-5">
           <div
             className={`
               flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-sm
@@ -188,20 +189,20 @@ function QuestionCard({
             {isAnswered ? <Check className="w-4 h-4" /> : index + 1}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 dark:text-white text-lg">
+            <p className="font-semibold text-slate-900 dark:text-white text-base sm:text-lg">
               {question.question}
             </p>
             {question.rationale && (
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 sm:mt-1.5">
                 {question.rationale}
               </p>
             )}
           </div>
         </div>
 
-        {/* Options or text input */}
+        {/* Options or text input - responsive margin */}
         {question.options ? (
-          <div className="space-y-2 ml-12">
+          <div className="space-y-2 sm:space-y-3 ml-0 sm:ml-12">
             {question.options.map((option) => (
               <OptionCard
                 key={option.value}
@@ -212,13 +213,14 @@ function QuestionCard({
             ))}
           </div>
         ) : (
-          <div className="ml-12">
+          <div className="ml-0 sm:ml-12">
             <textarea
               value={answer || ''}
               onChange={(e) => onAnswer(e.target.value)}
               placeholder="Enter your answer..."
               className={`
                 w-full h-28 p-4
+                text-base
                 bg-slate-50 dark:bg-slate-800
                 border-2 border-slate-200 dark:border-slate-700
                 rounded-xl resize-none
@@ -227,6 +229,7 @@ function QuestionCard({
                 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500
                 transition-all duration-200
               `}
+              aria-label={`Answer for: ${question.question}`}
             />
           </div>
         )}
@@ -252,22 +255,22 @@ export function ClarifyingQuestions({
   const progress = (answeredCount / questions.length) * 100;
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
+    <div className="w-full max-w-3xl mx-auto px-1">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        className="mb-6 sm:mb-8"
       >
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
-            <MessageCircleQuestion className="w-6 h-6 text-white" />
+        <div className="flex items-start sm:items-center gap-3 sm:gap-4 mb-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <MessageCircleQuestion className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
               A few clarifying questions
             </h2>
-            <p className="text-slate-600 dark:text-slate-400">
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
               Your answers will help provide a more accurate assessment.
             </p>
           </div>
@@ -290,12 +293,12 @@ export function ClarifyingQuestions({
       </motion.div>
 
       {/* Insights */}
-      <div className="mb-6">
+      <div className="mb-4 sm:mb-6">
         <InsightsCard insights={partialInsights} />
       </div>
 
       {/* Questions */}
-      <div className="space-y-4 mb-8">
+      <div className="space-y-4 mb-6 sm:mb-8">
         {questions.map((q, index) => (
           <QuestionCard
             key={q.id}
@@ -307,18 +310,20 @@ export function ClarifyingQuestions({
         ))}
       </div>
 
-      {/* Submit button */}
+      {/* Submit button - full width on mobile */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
-        className="flex justify-end"
+        className="flex justify-center sm:justify-end"
       >
         <Button
           onClick={onSubmit}
           disabled={!allAnswered || isLoading}
           isLoading={isLoading}
           size="lg"
+          fullWidth
+          className="sm:w-auto"
           rightIcon={!isLoading && <ArrowRight className="w-5 h-5" />}
         >
           {isLoading ? 'Evaluating...' : 'Get Full Assessment'}

@@ -243,47 +243,47 @@ export const ProgressBar = ({ currentPhase, className = '' }: ProgressSidebarPro
 
   return (
     <div className={`lg:hidden ${className}`}>
-      {/* Step indicators */}
-      <div className="flex items-center justify-between mb-2">
+      {/* Step indicators - larger touch targets */}
+      <div className="flex items-center justify-between mb-3 px-2">
         {steps.map((step, index) => {
           const status = getStepStatus(step.id, currentPhase);
           const Icon = step.icon;
 
           return (
-            <div key={step.id} className="flex flex-col items-center">
+            <div
+              key={step.id}
+              className="flex flex-col items-center relative"
+              role="listitem"
+              aria-label={`${step.label}: ${status}`}
+            >
               <div
                 className={`
-                  w-8 h-8 rounded-lg flex items-center justify-center
+                  w-10 h-10 rounded-xl flex items-center justify-center
+                  transition-all duration-200
                   ${
                     status === 'completed'
                       ? 'bg-emerald-500 text-white'
                       : status === 'current'
-                      ? 'bg-indigo-500 text-white'
+                      ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/30'
                       : 'bg-slate-100 text-slate-400 dark:bg-slate-800'
                   }
                 `}
               >
                 {status === 'completed' ? (
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-5 h-5" />
                 ) : status === 'current' && (step.id === 'screening' || step.id === 'evaluating') ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-5 h-5" />
                 )}
               </div>
-              {/* Only show label for current step on mobile */}
-              {status === 'current' && (
-                <span className="text-xs mt-1 text-slate-600 dark:text-slate-400 absolute -bottom-5 whitespace-nowrap">
-                  {step.label}
-                </span>
-              )}
             </div>
           );
         })}
       </div>
 
       {/* Progress bar */}
-      <div className="h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mx-2">
         <motion.div
           className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
           initial={{ width: '0%' }}

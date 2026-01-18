@@ -79,10 +79,10 @@ const variantStyles: Record<ButtonVariant, string> = {
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-sm',
-  lg: 'h-12 px-6 text-base',
-  xl: 'h-14 px-8 text-lg',
+  sm: 'h-9 min-h-[44px] px-3 text-sm',      // 44px min touch target
+  md: 'h-11 min-h-[44px] px-4 text-sm',     // 44px touch target
+  lg: 'h-12 min-h-[48px] px-5 sm:px-6 text-base', // 48px touch target
+  xl: 'h-14 min-h-[56px] px-6 sm:px-8 text-lg',   // 56px touch target
 };
 
 const iconSizeStyles: Record<ButtonSize, string> = {

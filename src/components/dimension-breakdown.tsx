@@ -130,12 +130,13 @@ function DimensionCard({
           isExpanded ? config.borderColor : ''
         }`}
       >
-        {/* Header - clickable */}
+        {/* Header - clickable with touch-friendly sizing */}
         <button
           onClick={onToggle}
-          className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+          className="w-full px-4 sm:px-5 py-4 min-h-[64px] flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 active:bg-slate-100 dark:active:bg-slate-800 transition-colors"
+          aria-expanded={isExpanded}
         >
-          <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
             {/* Score icon */}
             <div
               className={`
@@ -148,10 +149,10 @@ function DimensionCard({
 
             {/* Name and label */}
             <div className="flex-1 min-w-0 text-left">
-              <h4 className="font-semibold text-slate-900 dark:text-white truncate">
+              <h4 className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base truncate">
                 {dimension.name}
               </h4>
-              <div className="flex items-center gap-3 mt-0.5">
+              <div className="flex items-center gap-2 sm:gap-3 mt-0.5">
                 <Badge
                   variant={
                     dimension.score === 'favorable'
@@ -175,7 +176,7 @@ function DimensionCard({
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
             transition={{ duration: 0.2 }}
-            className="flex-shrink-0 ml-4"
+            className="flex-shrink-0 ml-2 sm:ml-4"
           >
             <ChevronDown className="w-5 h-5 text-slate-400" />
           </motion.div>

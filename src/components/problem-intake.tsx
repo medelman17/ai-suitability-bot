@@ -215,7 +215,7 @@ export function ProblemIntake({
   return (
     <div className="w-full max-w-3xl mx-auto">
       {/* Hero Header */}
-      <div className="text-center space-y-6 mb-10">
+      <div className="text-center space-y-4 sm:space-y-6 mb-8 sm:mb-10 px-2">
         {/* Badge */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -232,36 +232,37 @@ export function ProblemIntake({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="space-y-3"
+          className="space-y-2 sm:space-y-3"
         >
-          <h1 className="text-display text-slate-900 dark:text-white">
+          <h1 className="text-2xl sm:text-display text-slate-900 dark:text-white leading-tight">
             Is Your Problem{' '}
             <span className="gradient-text">Ready for AI?</span>
           </h1>
-          <p className="text-body-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+          <p className="text-base sm:text-body-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto px-2">
             Get an honest, data-driven assessment in 60 seconds.
-            <br className="hidden sm:block" />
+            <span className="hidden sm:inline"><br /></span>
+            <span className="sm:hidden"> </span>
             We tell you when AI is <em>not</em> the answer.
           </p>
         </motion.div>
 
-        {/* Trust indicators */}
+        {/* Trust indicators - mobile: vertical stack, desktop: horizontal */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="flex items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400"
+          className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-6 text-sm text-slate-500 dark:text-slate-400"
         >
           <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
             <span>7 dimensions analyzed</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
             <span>Honest recommendations</span>
           </div>
-          <div className="flex items-center gap-1.5 hidden sm:flex">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
             <span>Action checklist included</span>
           </div>
         </motion.div>
@@ -313,7 +314,8 @@ export function ProblemIntake({
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
                 className={`
-                  w-full h-48 p-4 pb-12
+                  w-full h-40 sm:h-48 p-4 pb-14 sm:pb-12
+                  text-base sm:text-lg
                   text-slate-900 dark:text-white
                   bg-transparent
                   border-none
@@ -324,6 +326,7 @@ export function ProblemIntake({
                 `}
                 disabled={isLoading}
                 maxLength={maxLength}
+                aria-label="Describe your business problem"
               />
 
               {/* Bottom bar */}
@@ -360,12 +363,12 @@ export function ProblemIntake({
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-between">
+        {/* Actions - stack on mobile */}
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
           <button
             type="button"
             onClick={() => setShowExamples(!showExamples)}
-            className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex items-center gap-1.5"
+            className="min-h-[44px] px-4 py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
             {showExamples ? 'Hide examples' : 'Try an example'}
@@ -374,6 +377,8 @@ export function ProblemIntake({
           <Button
             type="submit"
             size="lg"
+            fullWidth
+            className="sm:w-auto"
             disabled={!value.trim() || isLoading || isOverLimit}
             isLoading={isLoading}
             rightIcon={!isLoading && <ArrowRight className="w-5 h-5" />}

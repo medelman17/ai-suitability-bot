@@ -52,16 +52,17 @@ function ChecklistItem({
       <button
         onClick={onToggle}
         className={`
-          w-full flex items-start gap-4 p-4 rounded-xl text-left
-          transition-all duration-200
+          w-full flex items-start gap-3 sm:gap-4 p-4 min-h-[56px] rounded-xl text-left
+          transition-all duration-200 active:scale-[0.99]
           ${
             isChecked
               ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
               : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
           }
         `}
+        aria-pressed={isChecked}
       >
-        {/* Checkbox */}
+        {/* Checkbox - larger for touch */}
         <div className="flex-shrink-0 mt-0.5">
           <AnimatePresence mode="wait">
             {isChecked ? (
@@ -72,7 +73,7 @@ function ChecklistItem({
                 exit={{ scale: 0.8, opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
               </motion.div>
             ) : (
               <motion.div
@@ -82,7 +83,7 @@ function ChecklistItem({
                 exit={{ scale: 0.8, opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                <Circle className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors" />
+                <Circle className="w-6 h-6 text-slate-400 dark:text-slate-500 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors" />
               </motion.div>
             )}
           </AnimatePresence>
@@ -92,7 +93,7 @@ function ChecklistItem({
         <div className={`flex-1 transition-opacity ${isChecked ? 'opacity-70' : ''}`}>
           <p
             className={`
-              font-medium transition-all
+              font-medium text-sm sm:text-base transition-all
               ${
                 isChecked
                   ? 'text-emerald-800 dark:text-emerald-300 line-through'
@@ -210,16 +211,16 @@ export function ActionChecklist({ questions }: ActionChecklistProps) {
     >
       <Card
         variant="outlined"
-        padding="lg"
-        className="bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800"
+        padding="md"
+        className="bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 sm:p-6"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 mb-6">
+        {/* Header - stack on mobile */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 sm:mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
               <ClipboardList className="w-5 h-5 text-slate-600 dark:text-slate-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h4 className="font-semibold text-slate-900 dark:text-white">
                 Before You Build
               </h4>
@@ -229,12 +230,12 @@ export function ActionChecklist({ questions }: ActionChecklistProps) {
             </div>
           </div>
 
-          {/* Copy Button */}
+          {/* Copy Button - full width on mobile */}
           <button
             onClick={copyAsMarkdown}
             className={`
-              inline-flex items-center gap-2 px-4 py-2 rounded-lg
-              text-sm font-medium transition-all duration-200
+              inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl
+              text-sm font-medium transition-all duration-200 w-full sm:w-auto
               ${
                 copied
                   ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'

@@ -90,22 +90,22 @@ function AlternativeCard({ alternative, index }: { alternative: PartialAlternati
     >
       <Card
         variant="outlined"
-        padding="lg"
-        className="bg-purple-50/30 dark:bg-purple-950/10 border-purple-200/50 dark:border-purple-800/50 hover:border-purple-300 dark:hover:border-purple-700 transition-colors"
+        padding="md"
+        className="bg-purple-50/30 dark:bg-purple-950/10 border-purple-200/50 dark:border-purple-800/50 hover:border-purple-300 dark:hover:border-purple-700 transition-colors sm:p-6"
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-start justify-between gap-3 sm:gap-4 mb-4">
           <div className="flex items-start gap-3">
             {alternative.type && (
-              <div className={`w-10 h-10 rounded-xl bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center ${typeConfig[alternative.type].color}`}>
+              <div className={`w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0 rounded-xl bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center ${typeConfig[alternative.type].color}`}>
                 {typeConfig[alternative.type].icon}
               </div>
             )}
-            <div>
-              <h4 className="font-semibold text-slate-900 dark:text-white">
+            <div className="min-w-0">
+              <h4 className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base">
                 {alternative.name}
               </h4>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 flex-wrap">
                 {alternative.type && (
                   <Badge variant="primary" size="sm">
                     {typeConfig[alternative.type].label}
@@ -123,14 +123,14 @@ function AlternativeCard({ alternative, index }: { alternative: PartialAlternati
 
         {/* Description */}
         {alternative.description && (
-          <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-5">
+          <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4 sm:mb-5">
             {alternative.description}
           </p>
         )}
 
-        {/* Pros & Cons */}
+        {/* Pros & Cons - stack on mobile */}
         {(advantages.length > 0 || disadvantages.length > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
             {/* Advantages */}
             {advantages.length > 0 && (
               <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl p-4">
