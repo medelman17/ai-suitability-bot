@@ -5,9 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # Start development server (http://localhost:3000)
-npm run build    # Production build
-npm run lint     # ESLint
+npm run dev           # Start development server (http://localhost:3000)
+npm run build         # Production build
+npm run lint          # ESLint
+npm test              # Run tests once
+npm run test:watch    # Run tests in watch mode
+npm run test:coverage # Run tests with coverage report
 ```
 
 ## Environment
