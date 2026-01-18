@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RotateCcw, AlertCircle, Sparkles, ArrowUp } from 'lucide-react';
 import { useScreener } from '@/hooks/use-screener';
+import { useAnnounce, getPhaseAnnouncement, useReducedMotion } from '@/lib/accessibility';
 import {
   ProblemIntake,
   ClarifyingQuestions,
@@ -116,8 +118,40 @@ export default function Home() {
     reset,
   } = useScreener();
 
+  // Accessibility hooks
+  const { announce } = useAnnounce();
+  const prefersReducedMotion = useReducedMotion();
+  const previousPhaseRef = useRef(phase);
+
+  // Announce phase changes to screen readers
+  useEffect(() => {
+    if (phase !== previousPhaseRef.current) {
+      const announcement = getPhaseAnnouncement(phase);
+      announce(announcement, phase === 'complete' ? 'assertive' : 'polite');
+      previousPhaseRef.current = phase;
+    }
+  }, [phase, announce]);
+
+  // Announce verdict when evaluation completes
+  useEffect(() => {
+    if (phase === 'complete' && evaluation?.verdict) {
+      const verdictLabels: Record<string, string> = {
+        STRONG_FIT: 'Strong Fit - AI is well-suited for this problem',
+        CONDITIONAL: 'Conditional - AI can work with appropriate guardrails',
+        WEAK_FIT: 'Weak Fit - Consider alternatives first',
+        NOT_RECOMMENDED: 'Not Recommended - AI is not the right approach',
+      };
+      announce(`Verdict: ${verdictLabels[evaluation.verdict] || evaluation.verdict}`, 'assertive');
+    }
+  }, [phase, evaluation?.verdict, announce]);
+
   // Show scroll to top on results page
   const showScrollTop = phase === 'complete' || phase === 'evaluating';
+
+  // Adjust animations for reduced motion
+  const motionProps = prefersReducedMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : undefined;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -150,7 +184,7 @@ export default function Home() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1">
+      <main id="main-content" className="flex-1" role="main" aria-label="AI Suitability Evaluation">
         <Container size="lg" className="py-8 sm:py-12">
           {/* Error Display */}
           <AnimatePresence>
