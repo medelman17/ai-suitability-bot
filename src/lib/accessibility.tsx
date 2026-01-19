@@ -314,3 +314,82 @@ export function getPhaseAnnouncement(phase: string): string {
   };
   return announcements[phase] || `Now on ${phase}`;
 }
+
+// ============================================================================
+// PIPELINE PHASE HELPERS (9-phase system)
+// ============================================================================
+
+/**
+ * Pipeline phase type for the new 9-phase system.
+ */
+export type PipelinePhase =
+  | 'idle'
+  | 'starting'
+  | 'screening'
+  | 'dimensions'
+  | 'verdict'
+  | 'secondary'
+  | 'synthesis'
+  | 'complete'
+  | 'suspended'
+  | 'error';
+
+/**
+ * Get accessibility announcement for pipeline phases.
+ */
+export function getPipelinePhaseAnnouncement(phase: PipelinePhase): string {
+  const announcements: Record<PipelinePhase, string> = {
+    idle: 'Ready to describe your problem',
+    starting: 'Starting pipeline analysis',
+    screening: 'Screening your problem for AI suitability',
+    dimensions: 'Analyzing across 7 evaluation dimensions',
+    verdict: 'Computing final verdict',
+    secondary: 'Analyzing risks and alternatives',
+    synthesis: 'Synthesizing recommendations',
+    complete: 'Analysis complete, results are now available',
+    suspended: 'Additional information needed to continue',
+    error: 'An error occurred during analysis',
+  };
+  return announcements[phase];
+}
+
+/**
+ * Get ARIA label for pipeline phases.
+ */
+export function getPipelineAriaLabel(phase: PipelinePhase): string {
+  const labels: Record<PipelinePhase, string> = {
+    idle: 'Problem description input',
+    starting: 'Starting analysis',
+    screening: 'Initial screening',
+    dimensions: 'Dimension analysis in progress',
+    verdict: 'Computing verdict',
+    secondary: 'Secondary analysis',
+    synthesis: 'Synthesizing results',
+    complete: 'Analysis complete',
+    suspended: 'Waiting for additional information',
+    error: 'Error occurred',
+  };
+  return labels[phase];
+}
+
+/**
+ * Map pipeline phases to the legacy 5-phase system for backward compatibility.
+ * Used for components (Header, ProgressBar) that haven't been updated yet.
+ */
+export type LegacyPhase = 'intake' | 'screening' | 'questions' | 'evaluating' | 'complete';
+
+export function pipelinePhaseToLegacy(phase: PipelinePhase): LegacyPhase {
+  const mapping: Record<PipelinePhase, LegacyPhase> = {
+    idle: 'intake',
+    starting: 'screening',
+    screening: 'screening',
+    dimensions: 'evaluating',
+    verdict: 'evaluating',
+    secondary: 'evaluating',
+    synthesis: 'evaluating',
+    complete: 'complete',
+    suspended: 'questions',
+    error: 'intake', // Fall back to intake on error
+  };
+  return mapping[phase];
+}
