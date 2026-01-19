@@ -14,6 +14,8 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.15",
     "@ai-sdk/react": "^3.0.41",
+    "@mastra/core": "^0.24.9",
+    "@mastra/libsql": "^0.16.4",
     "@react-pdf/renderer": "^4.3.2",
     "ai": "^6.0.39",
     "framer-motion": "^12.26.2",
