@@ -269,12 +269,11 @@ describe('formatValidationError', () => {
       {
         code: 'too_small',
         minimum: 10,
-        type: 'string',
         inclusive: true,
         exact: false,
         message: 'Must be at least 10 characters',
         path: ['problem']
-      }
+      } as z.ZodIssue
     ]);
 
     const result = formatValidationError(error);
@@ -289,19 +288,17 @@ describe('formatValidationError', () => {
       {
         code: 'too_small',
         minimum: 1,
-        type: 'string',
         inclusive: true,
         exact: false,
         message: 'Required',
         path: ['problem']
-      },
+      } as z.ZodIssue,
       {
         code: 'invalid_type',
         expected: 'string',
-        received: 'number',
         message: 'Must be a string',
         path: ['problem']
-      }
+      } as z.ZodIssue
     ]);
 
     const result = formatValidationError(error);
@@ -316,12 +313,11 @@ describe('formatValidationError', () => {
       {
         code: 'too_small',
         minimum: 1,
-        type: 'string',
         inclusive: true,
         exact: false,
         message: 'Required',
         path: ['answers', 0, 'questionId']
-      }
+      } as z.ZodIssue
     ]);
 
     const result = formatValidationError(error);
@@ -336,12 +332,11 @@ describe('validationErrorResponse', () => {
       {
         code: 'too_small',
         minimum: 10,
-        type: 'string',
         inclusive: true,
         exact: false,
         message: 'Too short',
         path: ['problem']
-      }
+      } as z.ZodIssue
     ]);
 
     const response = validationErrorResponse(error);
@@ -354,12 +349,11 @@ describe('validationErrorResponse', () => {
       {
         code: 'too_small',
         minimum: 10,
-        type: 'string',
         inclusive: true,
         exact: false,
         message: 'Too short',
         path: ['problem']
-      }
+      } as z.ZodIssue
     ]);
 
     const response = validationErrorResponse(error);

@@ -25,7 +25,6 @@
  * @module api/pipeline/cancel
  */
 
-import { NextRequest } from 'next/server';
 import { getExecutorManager } from '../_lib/executor-singleton';
 import {
   CancelRequestSchema,
@@ -48,7 +47,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Cancel a running pipeline.
  */
-export async function POST(request: NextRequest): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   // Parse and validate request body
   let body: unknown;
   try {

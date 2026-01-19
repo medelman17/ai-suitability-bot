@@ -27,7 +27,6 @@
  * @module api/pipeline/status
  */
 
-import { NextRequest } from 'next/server';
 import { getExecutorManager } from '../_lib/executor-singleton';
 import {
   StatusQuerySchema,
@@ -56,7 +55,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Query the status of a pipeline run.
  */
-export async function GET(request: NextRequest): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   // Extract query parameters
   const { searchParams } = new URL(request.url);
   const runIdParam = searchParams.get('runId');

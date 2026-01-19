@@ -21,7 +21,6 @@
  * @module api/pipeline/start
  */
 
-import { NextRequest } from 'next/server';
 import {
   createSSEResponse,
   formatSSEEvent,
@@ -58,7 +57,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Start a new pipeline execution with SSE streaming.
  */
-export async function POST(request: NextRequest): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   // Parse and validate request body
   let body: unknown;
   try {
