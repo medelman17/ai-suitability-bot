@@ -282,3 +282,24 @@ export {
   executeParallelWithResilience,
   createLinkedAbortController
 } from './executor';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLIENT (Mastra-style SSE consumer)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Classes
+  PipelineClient,
+  PipelineRun,
+  PipelineStreamResponse,
+
+  // Factory
+  createPipelineClient,
+
+  // Types
+  type PipelineClientOptions,
+  type PipelineChunk,
+  type PipelineWatchState,
+  type ProcessDataStreamOptions,
+  type PipelineApiResult
+} from './client';

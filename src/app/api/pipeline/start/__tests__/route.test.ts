@@ -155,10 +155,11 @@ describe('POST /api/pipeline/start', () => {
 
     it('streams events to client', async () => {
       const runId = '123e4567-e89b-12d3-a456-426614174000';
-      let eventCallback: ((event: unknown) => void) | null = null;
+      // Use object to hold callback reference for TypeScript control flow
+      const callbackHolder: { fn: ((event: unknown) => void) | null } = { fn: null };
 
       mockStartPipeline.mockImplementation((input, onEvent) => {
-        eventCallback = onEvent;
+        callbackHolder.fn = onEvent;
         return {
           handle: createMockHandle(runId, new Promise((resolve) => {
             // Simulate async completion
@@ -174,8 +175,8 @@ describe('POST /api/pipeline/start', () => {
       const response = await POST(request);
 
       // Trigger some events before reading
-      eventCallback?.({ type: 'pipeline:start', runId, timestamp: Date.now() });
-      eventCallback?.({ type: 'screening:start' });
+      callbackHolder.fn?.({ type: 'pipeline:start', runId, timestamp: Date.now() });
+      callbackHolder.fn?.({ type: 'screening:start' });
 
       const events = await collectSSEEvents(response);
 

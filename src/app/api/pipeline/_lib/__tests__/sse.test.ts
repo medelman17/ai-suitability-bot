@@ -54,7 +54,8 @@ describe('formatSSEEvent', () => {
         id: 'q1',
         question: 'What is your budget?',
         rationale: 'Helps determine feasibility',
-        priority: 'blocking'
+        priority: 'blocking',
+        source: { stage: 'screening' }
       }
     };
 
