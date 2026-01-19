@@ -7,6 +7,10 @@
  * The stream remains open until the pipeline completes, suspends for questions,
  * fails, or the client disconnects.
  *
+ * Supports two execution paths (controlled by USE_MASTRA_NATIVE env var):
+ * - Legacy: Custom executor with in-memory state
+ * - Native: Mastra workflow with PostgreSQL snapshots
+ *
  * Request body:
  * {
  *   "problem": "string (10-5000 chars) - the AI use case to analyze",
@@ -28,6 +32,8 @@ import {
   formatDoneEvent
 } from '../_lib/sse';
 import { getExecutorManager } from '../_lib/executor-singleton';
+import { getMastraWorkflowManager } from '../_lib/mastra-workflow-manager';
+import { isMastraNativeEnabled } from '../_lib/feature-flags';
 import {
   StartRequestSchema,
   validationErrorResponse,
@@ -75,11 +81,85 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { problem, context } = validated.data;
+
+  // Route to appropriate handler based on feature flag
+  if (isMastraNativeEnabled()) {
+    return handleMastraNative(request, { problem, context });
+  }
+  return handleLegacyExecutor(request, { problem, context });
+}
+
+/**
+ * Handle pipeline start using Mastra native workflow execution.
+ */
+async function handleMastraNative(
+  request: Request,
+  input: { problem: string; context?: string }
+): Promise<Response> {
   const encoder = new TextEncoder();
+  const manager = getMastraWorkflowManager();
 
   try {
-    const manager = getExecutorManager();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Start the pipeline with event callback
+          // runId is used for internal tracking; events include it already
+          const { result } = await manager.startPipeline(
+            input,
+            (event) => {
+              controller.enqueue(encoder.encode(formatSSEEvent(event)));
+            }
+          );
 
+          // Wait for completion
+          const finalResult = await result;
+
+          // Send final status
+          switch (finalResult.status) {
+            case 'success':
+            case 'suspended':
+            case 'cancelled':
+              controller.enqueue(encoder.encode(formatDoneEvent()));
+              break;
+
+            case 'failed':
+              if (finalResult.error) {
+                controller.enqueue(encoder.encode(formatSSEError({
+                  message: finalResult.error.message,
+                  code: finalResult.error.code
+                })));
+              }
+              break;
+          }
+        } catch (error) {
+          console.error('[/api/pipeline/start] Mastra native error:', error);
+          const message = error instanceof Error ? error.message : 'Pipeline execution failed';
+          controller.enqueue(encoder.encode(formatSSEError(message)));
+        } finally {
+          controller.close();
+        }
+      }
+    });
+
+    return createSSEResponse(stream);
+  } catch (error) {
+    console.error('[/api/pipeline/start] Unexpected error:', error);
+    return serverErrorResponse();
+  }
+}
+
+/**
+ * Handle pipeline start using legacy custom executor.
+ */
+async function handleLegacyExecutor(
+  request: Request,
+  input: { problem: string; context?: string }
+): Promise<Response> {
+  const encoder = new TextEncoder();
+  const manager = getExecutorManager();
+
+  try {
     // Create a readable stream for SSE
     const stream = new ReadableStream({
       async start(controller) {
@@ -89,7 +169,7 @@ export async function POST(request: Request): Promise<Response> {
         try {
           // Start the pipeline with event subscription
           const { handle, unsubscribe: unsub } = manager.startPipeline(
-            { problem, context },
+            input,
             (event) => {
               // Enqueue each event as SSE
               controller.enqueue(encoder.encode(formatSSEEvent(event)));

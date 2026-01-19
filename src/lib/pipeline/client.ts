@@ -34,6 +34,15 @@ export interface PipelineClientOptions {
   backoffMs?: number;
   /** Maximum backoff delay in ms (default: 5000) */
   maxBackoffMs?: number;
+  /**
+   * Use Mastra native resume mode.
+   *
+   * When true, resume uses simplified API (runId + stepId + answers only).
+   * When false (default), resume uses legacy API (requires problem/context).
+   *
+   * This should match the server's USE_MASTRA_NATIVE environment variable.
+   */
+  useMastraNative?: boolean;
 }
 
 /**
@@ -100,6 +109,8 @@ export interface PipelineApiResult {
 interface RunInternalState {
   runId: string;
   stage: PipelineStage | null;
+  /** Step ID where pipeline suspended (for Mastra native resume) */
+  suspendedStepId: string | null;
   isRunning: boolean;
   isSuspended: boolean;
   isComplete: boolean;
@@ -109,6 +120,30 @@ interface RunInternalState {
   pendingQuestions: FollowUpQuestion[];
   abortController: AbortController | null;
   watchers: Set<(state: PipelineWatchState) => void>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STAGE TO STEP MAPPING
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Map pipeline stage names to Mastra workflow step IDs.
+ *
+ * Stages are emitted in events (e.g., 'screening'), while step IDs
+ * are the workflow step names used for resume (e.g., 'screener').
+ *
+ * @internal Used for future stage-to-step mapping when needed.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _stageToStepId(stage: PipelineStage): string {
+  const mapping: Record<PipelineStage, string> = {
+    screening: 'screener',
+    dimensions: 'dimensions',
+    verdict: 'verdict',
+    secondary: 'secondary',
+    synthesis: 'synthesis'
+  };
+  return mapping[stage] ?? stage;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -276,6 +311,7 @@ export class PipelineRun {
     this.state = {
       runId,
       stage: null,
+      suspendedStepId: null,
       isRunning: false,
       isSuspended: false,
       isComplete: false,
@@ -319,13 +355,21 @@ export class PipelineRun {
       throw new Error(`Run ${this.runId} is not suspended`);
     }
 
+    // Get step ID for Mastra native resume
+    const stepId = this.state.suspendedStepId;
+    if (!stepId) {
+      throw new Error(`Run ${this.runId} is suspended but step ID is unknown`);
+    }
+
     this.state.isRunning = true;
     this.state.isSuspended = false;
+    this.state.suspendedStepId = null; // Clear for next potential suspension
     this.state.abortController = new AbortController();
     this.notifyWatchers();
 
     const response = await this.client._resumeStream(
       this.runId,
+      stepId,
       answers,
       this.state.abortController.signal,
       (event) => this.handleEvent(event)
@@ -434,7 +478,12 @@ export class PipelineRun {
         break;
 
       case 'dimension:question':
+        // Dimension questions may indicate upcoming suspension
         this.state.pendingQuestions.push(event.question);
+        // Pre-set step ID for potential suspension at dimensions stage
+        if (this.state.stage === 'dimensions') {
+          this.state.suspendedStepId = 'dimensions';
+        }
         break;
 
       case 'screening:complete':
@@ -442,6 +491,8 @@ export class PipelineRun {
           // Suspended for screening questions
           this.state.isSuspended = true;
           this.state.isRunning = false;
+          // Track step ID for Mastra native resume
+          this.state.suspendedStepId = 'screener';
         }
         break;
 
@@ -532,6 +583,7 @@ export class PipelineClient {
   private retries: number;
   private backoffMs: number;
   private maxBackoffMs: number;
+  private useMastraNative: boolean;
   private runs: Map<string, PipelineRun> = new Map();
 
   constructor(options: PipelineClientOptions = {}) {
@@ -539,6 +591,7 @@ export class PipelineClient {
     this.retries = options.retries ?? 3;
     this.backoffMs = options.backoffMs ?? 300;
     this.maxBackoffMs = options.maxBackoffMs ?? 5000;
+    this.useMastraNative = options.useMastraNative ?? false;
   }
 
   /**
@@ -696,26 +749,35 @@ export class PipelineClient {
   /** @internal */
   async _resumeStream(
     runId: string,
+    stepId: string,
     answers: Answer[],
     signal: AbortSignal,
     onEvent: (event: PipelineEvent) => void
   ): Promise<PipelineStreamResponse> {
-    // Get the original problem/context for stateless serverless resume
-    const run = this.runs.get(runId) as PipelineRunWithInput | undefined;
-    if (!run || !run._input) {
-      throw new Error(`Run ${runId} not found or missing input`);
-    }
-    const { problem, context } = run._input;
-
     let lastError: Error | null = null;
+
+    // Build request body based on execution mode
+    let requestBody: unknown;
+
+    if (this.useMastraNative) {
+      // Mastra native mode: simplified API (state is in PostgreSQL)
+      requestBody = { runId, stepId, answers };
+    } else {
+      // Legacy mode: stateless restart (requires problem/context)
+      const run = this.runs.get(runId) as PipelineRunWithInput | undefined;
+      if (!run || !run._input) {
+        throw new Error(`Run ${runId} not found or missing input`);
+      }
+      const { problem, context } = run._input;
+      requestBody = { runId, problem, context, answers };
+    }
 
     for (let attempt = 0; attempt <= this.retries; attempt++) {
       try {
-        // Include problem and context for stateless serverless resume
         const response = await fetch(`${this.baseUrl}/api/pipeline/resume`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ runId, problem, context, answers }),
+          body: JSON.stringify(requestBody),
           signal
         });
 

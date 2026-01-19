@@ -303,3 +303,23 @@ export {
   type ProcessDataStreamOptions,
   type PipelineApiResult
 } from './client';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WORKFLOW UTILITIES (Event emission for Mastra native)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Event emission
+  emitPipelineEvent,
+  isPipelineEventEnvelope,
+
+  // Resilience for steps
+  executeAnalyzerWithResilience,
+  executeAnalyzerSafe,
+
+  // Types
+  type StepWriter,
+  type PipelineEventEnvelope,
+  type AnalyzerResilienceConfig,
+  type ResilientResult
+} from './workflow';

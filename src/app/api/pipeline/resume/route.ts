@@ -6,30 +6,23 @@
  * Resumes a suspended pipeline with answers to pending questions.
  * Returns an SSE stream of progress events.
  *
- * IMPORTANT: In serverless environments, run state is not preserved between
- * function invocations. This endpoint implements stateless resume by
- * restarting the pipeline with the provided answers pre-applied.
+ * Supports two execution paths (controlled by USE_MASTRA_NATIVE env var):
  *
- * Request body:
- * {
- *   "runId": "uuid - original run ID (used as correlation ID)",
- *   "problem": "string - the original problem description",
- *   "context": "string? - optional additional context",
- *   "answers": [
- *     { "questionId": "string", "answer": "string" },
- *     ...
- *   ]
- * }
+ * Legacy (stateless restart):
+ * - In serverless environments, run state is not preserved between invocations
+ * - Restarts pipeline from scratch with answers pre-applied
+ * - Requires: runId, problem, context, answers
  *
- * Response: Server-Sent Events stream (same format as /start)
- *
- * Error cases:
- * - 400: Invalid request format
+ * Mastra Native (true resume):
+ * - Uses PostgreSQL snapshots for true suspend/resume
+ * - Loads workflow state from database
+ * - Requires: runId, stepId, answers (no need for problem/context)
  *
  * @module api/pipeline/resume
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import type { UserAnswer } from '@/lib/pipeline';
 import {
   createSSEResponse,
@@ -38,8 +31,11 @@ import {
   formatDoneEvent
 } from '../_lib/sse';
 import { getExecutorManager } from '../_lib/executor-singleton';
+import { getMastraWorkflowManager } from '../_lib/mastra-workflow-manager';
+import { isMastraNativeEnabled } from '../_lib/feature-flags';
 import {
   ResumeRequestSchema,
+  AnswerSchema,
   validationErrorResponse,
   serverErrorResponse
 } from '../_lib/validation';
@@ -52,15 +48,34 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SCHEMAS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Schema for Mastra native resume (simplified - no problem/context needed).
+ *
+ * With PostgreSQL snapshots, the workflow state is persisted and loaded
+ * automatically, so we only need the runId, stepId, and answers.
+ */
+const MastraNativeResumeSchema = z.object({
+  /** Run ID of the suspended pipeline (UUID format) */
+  runId: z.string().uuid('Run ID must be a valid UUID'),
+  /** Step ID to resume from (e.g., 'screener', 'dimensions') */
+  stepId: z.string().min(1, 'Step ID is required'),
+  /** Answers to pending questions (at least one) */
+  answers: z.array(AnswerSchema).min(1, 'At least one answer is required')
+}).strict();
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ROUTE HANDLER
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Resume a suspended pipeline with answers.
  *
- * In serverless mode, this restarts the pipeline from scratch with the
- * provided answers pre-applied. The pipeline will skip questions that
- * have already been answered.
+ * Routes to appropriate handler based on feature flag:
+ * - Mastra Native: True resume using PostgreSQL snapshots
+ * - Legacy: Stateless restart with pre-applied answers
  */
 export async function POST(request: NextRequest): Promise<Response> {
   // Parse and validate request body
@@ -74,13 +89,113 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
+  // Route to appropriate handler based on feature flag
+  if (isMastraNativeEnabled()) {
+    // Validate against simplified schema
+    const validated = MastraNativeResumeSchema.safeParse(body);
+    if (!validated.success) {
+      return validationErrorResponse(validated.error);
+    }
+    return handleMastraNativeResume(request, validated.data);
+  }
+
+  // Validate against legacy schema (requires problem/context)
   const validated = ResumeRequestSchema.safeParse(body);
   if (!validated.success) {
     return validationErrorResponse(validated.error);
   }
+  return handleLegacyResume(request, validated.data);
+}
 
-  const { runId, problem, context, answers } = validated.data;
+/**
+ * Handle resume using Mastra native workflow execution.
+ *
+ * This uses true suspend/resume with PostgreSQL snapshots.
+ * The workflow state is loaded from the database, so no need
+ * to resend the original problem/context.
+ */
+async function handleMastraNativeResume(
+  request: NextRequest,
+  data: z.infer<typeof MastraNativeResumeSchema>
+): Promise<Response> {
+  const { runId, stepId, answers } = data;
+  const encoder = new TextEncoder();
+  const manager = getMastraWorkflowManager();
+
+  // Convert API answers to UserAnswer format
+  const now = Date.now();
+  const userAnswers: UserAnswer[] = answers.map((a) => ({
+    questionId: a.questionId,
+    answer: a.answer,
+    source: stepId === 'screener' ? 'screening' as const : 'dimension' as const,
+    timestamp: now
+  }));
+
+  try {
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Resume the pipeline with answers
+          const { result } = await manager.resumePipeline(
+            runId,
+            stepId,
+            userAnswers,
+            (event) => {
+              controller.enqueue(encoder.encode(formatSSEEvent(event)));
+            }
+          );
+
+          // Wait for completion
+          const finalResult = await result;
+
+          // Send final status
+          switch (finalResult.status) {
+            case 'success':
+            case 'suspended':
+            case 'cancelled':
+              controller.enqueue(encoder.encode(formatDoneEvent()));
+              break;
+
+            case 'failed':
+              if (finalResult.error) {
+                controller.enqueue(encoder.encode(formatSSEError({
+                  message: finalResult.error.message,
+                  code: finalResult.error.code
+                })));
+              }
+              break;
+          }
+        } catch (error) {
+          console.error('[/api/pipeline/resume] Mastra native error:', error);
+          const message = error instanceof Error ? error.message : 'Pipeline resume failed';
+          controller.enqueue(encoder.encode(formatSSEError(message)));
+        } finally {
+          controller.close();
+        }
+      }
+    });
+
+    return createSSEResponse(stream);
+  } catch (error) {
+    console.error('[/api/pipeline/resume] Unexpected error:', error);
+    return serverErrorResponse();
+  }
+}
+
+/**
+ * Handle resume using legacy stateless restart.
+ *
+ * In serverless mode, this restarts the pipeline from scratch with the
+ * provided answers pre-applied. The pipeline will skip questions that
+ * have already been answered.
+ */
+async function handleLegacyResume(
+  request: NextRequest,
+  data: z.infer<typeof ResumeRequestSchema>
+): Promise<Response> {
+  const { runId, problem, context, answers } = data;
   const manager = getExecutorManager();
+  const encoder = new TextEncoder();
 
   // Convert API answers to UserAnswer format
   // Use 'screening' as source since stateless resume starts fresh
@@ -92,8 +207,6 @@ export async function POST(request: NextRequest): Promise<Response> {
     source: 'screening' as const,
     timestamp: now
   }));
-
-  const encoder = new TextEncoder();
 
   try {
     // Create SSE stream

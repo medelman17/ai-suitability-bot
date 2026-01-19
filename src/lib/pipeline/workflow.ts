@@ -7,6 +7,7 @@
  * - Suspend/resume for user questions
  * - Automatic snapshot persistence
  * - Streaming execution results
+ * - Event emission for real-time progress updates
  *
  * @module pipeline/workflow
  */
@@ -36,7 +37,8 @@ import {
   type PreBuildQuestion,
   type FollowUpQuestion,
   type UserAnswer,
-  type AnalysisResult
+  type AnalysisResult,
+  type DimensionId
 } from './types';
 
 import { type WorkflowState, createInitialState, assembleResult } from './state';
@@ -47,8 +49,14 @@ import {
   analyzeAllDimensions,
   calculateVerdict,
   runSecondaryAnalyses,
-  synthesizeReasoning
+  synthesizeReasoning,
+  ALL_DIMENSION_IDS
 } from './analyzers';
+
+// Import event emission and resilience utilities
+import { events } from './events';
+import { emitPipelineEvent, type StepWriter } from './workflow/event-emitter';
+import { executeAnalyzerWithResilience } from './workflow/resilience';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WORKFLOW STATE SCHEMA
@@ -142,6 +150,7 @@ const SynthesisStepOutputSchema = z.object({
  * 2. Surfaces clarifying questions if needed
  * 3. Determines dimension priorities
  * 4. May suspend to collect answers for blocking questions
+ * 5. Emits events for real-time progress updates
  */
 export const screenerStep = createStep({
   id: 'screener',
@@ -151,22 +160,51 @@ export const screenerStep = createStep({
   suspendSchema: SuspendForQuestionsSchema,
   resumeSchema: ResumeWithAnswersSchema,
   stateSchema: WorkflowStateSchema,
-  execute: async ({ inputData, resumeData, suspend, setState, state, runId }) => {
+  execute: async ({ inputData, resumeData, suspend, setState, state, runId, writer }) => {
+    // Cast writer to our StepWriter type (Mastra provides this when streaming)
+    const stepWriter = writer as StepWriter | undefined;
+
+    // Emit stage transition event
+    await emitPipelineEvent(stepWriter, events.pipelineStage('screening'));
+    await emitPipelineEvent(stepWriter, events.screeningStart());
+
     // Get current answers from state or initialize empty
     let currentAnswers = state?.answers || {};
 
-    // If we were resumed with answers, incorporate them
+    // If we were resumed with answers, incorporate them and emit events
     if (resumeData?.answers && state) {
       const updatedAnswers = { ...currentAnswers };
       for (const answer of resumeData.answers) {
         updatedAnswers[answer.questionId] = answer;
+        // Emit event for each received answer
+        await emitPipelineEvent(
+          stepWriter,
+          events.answerReceived(answer.questionId, answer.answer)
+        );
       }
       currentAnswers = updatedAnswers;
       setState({ ...state, answers: updatedAnswers });
     }
 
-    // Call the AI-powered screening analyzer
-    const screening = await analyzeScreening(inputData, currentAnswers);
+    // Call the AI-powered screening analyzer with resilience
+    const screening = await executeAnalyzerWithResilience(
+      () => analyzeScreening(inputData, currentAnswers),
+      'screening',
+      { maxAttempts: 3, timeout: 30000 }
+    );
+
+    // Emit preliminary signal if available
+    if (screening.preliminarySignal) {
+      await emitPipelineEvent(
+        stepWriter,
+        events.screeningSignal(screening.preliminarySignal)
+      );
+    }
+
+    // Emit events for each question surfaced
+    for (const question of screening.clarifyingQuestions) {
+      await emitPipelineEvent(stepWriter, events.screeningQuestion(question));
+    }
 
     // Check if we need to suspend for blocking questions
     const blockingQuestions = screening.clarifyingQuestions.filter(
@@ -189,6 +227,16 @@ export const screenerStep = createStep({
       return { screening, suspended: true };
     }
 
+    // Emit screening complete event
+    await emitPipelineEvent(
+      stepWriter,
+      events.screeningComplete(
+        screening.canEvaluate,
+        screening.dimensionPriorities,
+        screening.canEvaluate ? undefined : 'Insufficient information for evaluation'
+      )
+    );
+
     // Update state with screening results
     if (state) {
       setState({
@@ -210,6 +258,7 @@ export const screenerStep = createStep({
  * 2. Uses tool-calling for specialized calculations
  * 3. May emit questions for specific dimensions
  * 4. Can suspend to collect answers
+ * 5. Emits events for real-time progress updates
  */
 export const dimensionsStep = createStep({
   id: 'dimensions',
@@ -219,15 +268,25 @@ export const dimensionsStep = createStep({
   suspendSchema: SuspendForQuestionsSchema,
   resumeSchema: ResumeWithAnswersSchema,
   stateSchema: WorkflowStateSchema,
-  execute: async ({ inputData, resumeData, suspend, setState, state }) => {
+  execute: async ({ inputData, resumeData, suspend, setState, state, writer }) => {
+    // Cast writer to our StepWriter type
+    const stepWriter = writer as StepWriter | undefined;
+
+    // Emit stage transition event
+    await emitPipelineEvent(stepWriter, events.pipelineStage('dimensions'));
+
     // Get current answers from state or initialize empty
     let currentAnswers = state?.answers || {};
 
-    // If we were resumed with answers, incorporate them
+    // If we were resumed with answers, incorporate them and emit events
     if (resumeData?.answers && state) {
       const updatedAnswers = { ...currentAnswers };
       for (const answer of resumeData.answers) {
         updatedAnswers[answer.questionId] = answer;
+        await emitPipelineEvent(
+          stepWriter,
+          events.answerReceived(answer.questionId, answer.answer)
+        );
       }
       currentAnswers = updatedAnswers;
       setState({ ...state, answers: updatedAnswers });
@@ -237,8 +296,51 @@ export const dimensionsStep = createStep({
     const input = state?.input || { problem: '' };
     const screening = inputData.screening;
 
-    // Call the AI-powered dimension analyzers (runs all 7 in parallel)
-    const dimensions = await analyzeAllDimensions(input, screening, currentAnswers);
+    // Emit dimension start events for all dimensions
+    const dimensionNames: Record<DimensionId, string> = {
+      task_determinism: 'Task Determinism',
+      error_tolerance: 'Error Tolerance',
+      data_availability: 'Data Availability',
+      evaluation_clarity: 'Evaluation Clarity',
+      edge_case_risk: 'Edge Case Risk',
+      human_oversight_cost: 'Human Oversight Cost',
+      rate_of_change: 'Rate of Change'
+    };
+
+    for (const dimId of ALL_DIMENSION_IDS) {
+      const priority = screening.dimensionPriorities.find((p) => p.dimensionId === dimId);
+      await emitPipelineEvent(
+        stepWriter,
+        events.dimensionStart(dimId, dimensionNames[dimId], priority?.priority || 'medium')
+      );
+    }
+
+    // Call the AI-powered dimension analyzers with resilience
+    const dimensions = await executeAnalyzerWithResilience(
+      () => analyzeAllDimensions(input, screening, currentAnswers),
+      'dimensions',
+      { maxAttempts: 3, timeout: 90000 }
+    );
+
+    // Emit completion events for each dimension
+    for (const [dimId, analysis] of Object.entries(dimensions)) {
+      // Emit preliminary score first
+      await emitPipelineEvent(
+        stepWriter,
+        events.dimensionPreliminary(dimId as DimensionId, analysis.score, analysis.confidence)
+      );
+
+      // Emit any dimension-specific questions
+      for (const question of analysis.infoGaps) {
+        await emitPipelineEvent(stepWriter, events.dimensionQuestion(question));
+      }
+
+      // Emit dimension complete
+      await emitPipelineEvent(
+        stepWriter,
+        events.dimensionComplete(dimId as DimensionId, analysis)
+      );
+    }
 
     // Check if we need to suspend for blocking questions
     const allQuestions = Object.values(dimensions).flatMap((d) => d.infoGaps);
@@ -277,6 +379,7 @@ export const dimensionsStep = createStep({
  * 1. Takes all dimension analyses
  * 2. Weighs evidence across dimensions
  * 3. Produces a final verdict with reasoning
+ * 4. Emits events for real-time progress updates
  */
 export const verdictStep = createStep({
   id: 'verdict',
@@ -284,14 +387,37 @@ export const verdictStep = createStep({
   inputSchema: DimensionsStepOutputSchema,
   outputSchema: VerdictStepOutputSchema,
   stateSchema: WorkflowStateSchema,
-  execute: async ({ inputData, setState, state }) => {
+  execute: async ({ inputData, setState, state, writer }) => {
+    // Cast writer to our StepWriter type
+    const stepWriter = writer as StepWriter | undefined;
+
+    // Emit stage transition event
+    await emitPipelineEvent(stepWriter, events.pipelineStage('verdict'));
+
+    // Emit computing event with dimension counts
+    const completedDimensions = Object.keys(inputData.dimensions).length;
+    await emitPipelineEvent(
+      stepWriter,
+      events.verdictComputing(completedDimensions, 7)
+    );
+
     // Get input and screening from state
     const input = state?.input || { problem: '' };
     const screening = state?.screening || null;
     const dimensions = inputData.dimensions;
 
-    // Call the AI-powered verdict calculator
-    const verdict = await calculateVerdict(input, screening, dimensions);
+    // Call the AI-powered verdict calculator with resilience
+    const verdict = await executeAnalyzerWithResilience(
+      () => calculateVerdict(input, screening, dimensions),
+      'verdict',
+      { maxAttempts: 3, timeout: 30000 }
+    );
+
+    // Emit verdict result event
+    await emitPipelineEvent(
+      stepWriter,
+      events.verdictResult(verdict.verdict, verdict.confidence, verdict.summary)
+    );
 
     // Update state with verdict
     if (state) {
@@ -313,6 +439,7 @@ export const verdictStep = createStep({
  * 2. Alternative approaches suggestion
  * 3. Architecture recommendations (if applicable)
  * 4. Pre-build questions
+ * 5. Emits events for real-time progress updates
  */
 export const secondaryStep = createStep({
   id: 'secondary',
@@ -320,16 +447,37 @@ export const secondaryStep = createStep({
   inputSchema: VerdictStepOutputSchema,
   outputSchema: SecondaryStepOutputSchema,
   stateSchema: WorkflowStateSchema,
-  execute: async ({ inputData, setState, state }) => {
+  execute: async ({ inputData, setState, state, writer }) => {
+    // Cast writer to our StepWriter type
+    const stepWriter = writer as StepWriter | undefined;
+
+    // Emit stage transition event
+    await emitPipelineEvent(stepWriter, events.pipelineStage('secondary'));
+
     // Get required data from state
     const input = state?.input || { problem: '' };
     const dimensions = state?.dimensions || {};
     const verdict = inputData.verdict;
 
-    // Run all secondary analyses in parallel
-    const secondaryResult = await runSecondaryAnalyses(input, dimensions, verdict);
+    // Emit start events for each secondary analysis
+    await emitPipelineEvent(stepWriter, events.risksStart());
+    await emitPipelineEvent(stepWriter, events.alternativesStart());
+    await emitPipelineEvent(stepWriter, events.architectureStart());
+
+    // Run all secondary analyses in parallel with resilience
+    const secondaryResult = await executeAnalyzerWithResilience(
+      () => runSecondaryAnalyses(input, dimensions, verdict),
+      'secondary',
+      { maxAttempts: 3, timeout: 60000 }
+    );
 
     const { risks, alternatives, architecture, questionsBeforeBuilding } = secondaryResult;
+
+    // Emit completion events for each analysis
+    await emitPipelineEvent(stepWriter, events.risksComplete(risks));
+    await emitPipelineEvent(stepWriter, events.alternativesComplete(alternatives));
+    await emitPipelineEvent(stepWriter, events.architectureComplete(architecture));
+    await emitPipelineEvent(stepWriter, events.preBuildComplete(questionsBeforeBuilding));
 
     // Update state with secondary results
     if (state) {
@@ -385,6 +533,7 @@ function createFallbackResult(
  * 1. Takes all prior analysis
  * 2. Generates final chain-of-thought reasoning
  * 3. Assembles the complete AnalysisResult
+ * 4. Emits events for real-time progress updates including final result
  */
 export const synthesisStep = createStep({
   id: 'synthesis',
@@ -392,7 +541,14 @@ export const synthesisStep = createStep({
   inputSchema: SecondaryStepOutputSchema,
   outputSchema: SynthesisStepOutputSchema,
   stateSchema: WorkflowStateSchema,
-  execute: async ({ inputData, setState, state, runId }) => {
+  execute: async ({ inputData, setState, state, runId, writer }) => {
+    // Cast writer to our StepWriter type
+    const stepWriter = writer as StepWriter | undefined;
+
+    // Emit stage transition event
+    await emitPipelineEvent(stepWriter, events.pipelineStage('synthesis'));
+    await emitPipelineEvent(stepWriter, events.reasoningStart());
+
     // Build synthesis input from accumulated state
     const synthesisInput = {
       input: state?.input || { problem: '' },
@@ -412,10 +568,17 @@ export const synthesisStep = createStep({
       questionsBeforeBuilding: inputData.questionsBeforeBuilding
     };
 
-    // Call the AI-powered synthesizer
-    const synthesisOutput = await synthesizeReasoning(synthesisInput);
+    // Call the AI-powered synthesizer with resilience
+    const synthesisOutput = await executeAnalyzerWithResilience(
+      () => synthesizeReasoning(synthesisInput),
+      'synthesis',
+      { maxAttempts: 3, timeout: 30000 }
+    );
 
     const reasoning = synthesisOutput.reasoning;
+
+    // Emit reasoning complete event
+    await emitPipelineEvent(stepWriter, events.reasoningComplete(reasoning));
 
     // Mark completion time and update state with synthesis output
     if (state) {
@@ -432,6 +595,9 @@ export const synthesisStep = createStep({
     const result: AnalysisResult = state
       ? assembleResult(state as unknown as WorkflowState, runId || 'unknown')
       : createFallbackResult(inputData, reasoning, runId || 'unknown');
+
+    // Emit pipeline complete event with the full result
+    await emitPipelineEvent(stepWriter, events.pipelineComplete(result));
 
     return { reasoning, result };
   }
@@ -470,3 +636,27 @@ export const analysisPipeline = createWorkflow({
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type { WorkflowState };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RE-EXPORTS FROM WORKFLOW UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Re-export utilities from the workflow/ subdirectory for convenience.
+ * This allows imports like: import { emitPipelineEvent } from '@/lib/pipeline/workflow'
+ */
+export {
+  // Event emission
+  emitPipelineEvent,
+  isPipelineEventEnvelope,
+  type StepWriter,
+  type PipelineEventEnvelope
+} from './workflow/event-emitter';
+
+export {
+  // Resilience for steps
+  executeAnalyzerWithResilience,
+  executeAnalyzerSafe,
+  type AnalyzerResilienceConfig,
+  type ResilientResult
+} from './workflow/resilience';

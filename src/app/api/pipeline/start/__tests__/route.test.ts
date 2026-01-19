@@ -23,6 +23,19 @@ vi.mock('../../_lib/executor-singleton', () => ({
   })
 }));
 
+// Mock Mastra workflow manager (prevents PostgresStore initialization)
+vi.mock('../../_lib/mastra-workflow-manager', () => ({
+  getMastraWorkflowManager: () => ({
+    startPipeline: vi.fn(),
+    resumePipeline: vi.fn()
+  })
+}));
+
+// Mock feature flag to use legacy executor (which we mock above)
+vi.mock('../../_lib/feature-flags', () => ({
+  isMastraNativeEnabled: () => false
+}));
+
 // ============================================================================
 // TEST FIXTURES
 // ============================================================================
