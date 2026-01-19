@@ -6,9 +6,15 @@
  * Resumes a suspended pipeline with answers to pending questions.
  * Returns an SSE stream of progress events.
  *
+ * IMPORTANT: In serverless environments, run state is not preserved between
+ * function invocations. This endpoint implements stateless resume by
+ * restarting the pipeline with the provided answers pre-applied.
+ *
  * Request body:
  * {
- *   "runId": "uuid - the suspended pipeline run ID",
+ *   "runId": "uuid - original run ID (used as correlation ID)",
+ *   "problem": "string - the original problem description",
+ *   "context": "string? - optional additional context",
  *   "answers": [
  *     { "questionId": "string", "answer": "string" },
  *     ...
@@ -19,8 +25,6 @@
  *
  * Error cases:
  * - 400: Invalid request format
- * - 404: Run not found
- * - 409: Run is not suspended (already completed, failed, etc.)
  *
  * @module api/pipeline/resume
  */
@@ -37,8 +41,6 @@ import { getExecutorManager } from '../_lib/executor-singleton';
 import {
   ResumeRequestSchema,
   validationErrorResponse,
-  notFoundResponse,
-  conflictResponse,
   serverErrorResponse
 } from '../_lib/validation';
 
@@ -55,6 +57,10 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Resume a suspended pipeline with answers.
+ *
+ * In serverless mode, this restarts the pipeline from scratch with the
+ * provided answers pre-applied. The pipeline will skip questions that
+ * have already been answered.
  */
 export async function POST(request: NextRequest): Promise<Response> {
   // Parse and validate request body
@@ -73,53 +79,60 @@ export async function POST(request: NextRequest): Promise<Response> {
     return validationErrorResponse(validated.error);
   }
 
-  const { runId, answers } = validated.data;
+  const { runId, problem, context, answers } = validated.data;
   const manager = getExecutorManager();
 
-  // Check if run exists and is suspended
-  const status = manager.getRunStatus(runId);
-  if (!status) {
-    return notFoundResponse(`Run ${runId} not found`);
-  }
-
-  if (status.status !== 'suspended') {
-    return conflictResponse(
-      `Run ${runId} is not suspended (current status: ${status.status})`
-    );
-  }
-
   // Convert API answers to UserAnswer format
-  // Derive source from the suspended stage, timestamp from now
+  // Use 'screening' as source since stateless resume starts fresh
+  // and screening questions are what cause the initial suspension
   const now = Date.now();
   const userAnswers: UserAnswer[] = answers.map((a) => ({
     questionId: a.questionId,
     answer: a.answer,
-    source: status.stage === 'screening' ? 'screening' : 'dimension',
+    source: 'screening' as const,
     timestamp: now
   }));
 
   const encoder = new TextEncoder();
 
   try {
-    // Create SSE stream for resume
+    // Create SSE stream
+    // In serverless mode, we start a fresh pipeline with answers pre-applied
     const stream = new ReadableStream({
       async start(controller) {
+        let newRunId: string | null = null;
         let unsubscribe: (() => void) | null = null;
 
         try {
-          // Resume the pipeline with event subscription
-          const { handle, unsubscribe: unsub } = manager.resumePipeline(
-            { runId, answers: userAnswers },
+          // Send a "resumed" event to indicate we're continuing
+          // Note: runId is the original client-side ID (used as correlation)
+          controller.enqueue(encoder.encode(formatSSEEvent({
+            type: 'pipeline:resumed',
+            runId: runId,
+            fromStep: 'screening'
+          })));
+
+          // Start fresh pipeline with the problem and pre-applied answers
+          const { handle, unsubscribe: unsub } = manager.startPipeline(
+            {
+              problem,
+              context,
+              // Pre-apply answers so the pipeline knows about them
+              preAppliedAnswers: userAnswers
+            },
             (event) => {
               controller.enqueue(encoder.encode(formatSSEEvent(event)));
             }
           );
 
+          newRunId = handle.runId;
           unsubscribe = unsub;
 
           // Handle client disconnect
           const abortHandler = () => {
-            manager.cancelRun(runId);
+            if (newRunId) {
+              manager.cancelRun(newRunId);
+            }
           };
           request.signal.addEventListener('abort', abortHandler);
 
@@ -151,7 +164,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           if (unsubscribe) {
             unsubscribe();
           }
-          manager.cleanupRun(runId);
+          if (newRunId) {
+            manager.cleanupRun(newRunId);
+          }
           controller.close();
         }
       }

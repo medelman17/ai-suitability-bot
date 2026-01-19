@@ -76,13 +76,25 @@ export interface WorkflowState {
 /**
  * Creates initial workflow state from input.
  *
- * @param input - The problem description and optional context
+ * If `preAppliedAnswers` are provided in the input (for stateless resume),
+ * they will be pre-populated in the answers record. This allows the pipeline
+ * to restart from scratch but skip questions that have already been answered.
+ *
+ * @param input - The problem description, optional context, and pre-applied answers
  * @returns Initial WorkflowState for Mastra's state system
  */
 export function createInitialState(input: PipelineInput): WorkflowState {
+  // Pre-populate answers from preAppliedAnswers if provided
+  const answers: Record<string, UserAnswer> = {};
+  if (input.preAppliedAnswers) {
+    for (const answer of input.preAppliedAnswers) {
+      answers[answer.questionId] = answer;
+    }
+  }
+
   return {
     input,
-    answers: {},
+    answers,
     screening: null,
     dimensions: {},
     pendingQuestions: [],
