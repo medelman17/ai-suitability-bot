@@ -103,12 +103,24 @@ export interface PipelineInput {
   problem: string;
   /** Optional additional context */
   context?: string;
+  /**
+   * Pre-applied answers from a previous suspended run.
+   * Used for stateless resume in serverless environments.
+   * The pipeline will use these answers instead of asking the questions.
+   */
+  preAppliedAnswers?: UserAnswer[];
 }
 
 /** Zod schema for PipelineInput validation */
 export const PipelineInputSchema = z.object({
   problem: z.string().min(1, 'Problem description is required'),
-  context: z.string().optional()
+  context: z.string().optional(),
+  preAppliedAnswers: z.array(z.object({
+    questionId: z.string(),
+    answer: z.string(),
+    source: z.enum(['screening', 'dimension']),
+    timestamp: z.number()
+  })).optional()
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

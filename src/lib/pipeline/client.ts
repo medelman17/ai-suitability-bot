@@ -700,14 +700,22 @@ export class PipelineClient {
     signal: AbortSignal,
     onEvent: (event: PipelineEvent) => void
   ): Promise<PipelineStreamResponse> {
+    // Get the original problem/context for stateless serverless resume
+    const run = this.runs.get(runId) as PipelineRunWithInput | undefined;
+    if (!run || !run._input) {
+      throw new Error(`Run ${runId} not found or missing input`);
+    }
+    const { problem, context } = run._input;
+
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= this.retries; attempt++) {
       try {
+        // Include problem and context for stateless serverless resume
         const response = await fetch(`${this.baseUrl}/api/pipeline/resume`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ runId, answers }),
+          body: JSON.stringify({ runId, problem, context, answers }),
           signal
         });
 

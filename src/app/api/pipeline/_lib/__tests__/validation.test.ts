@@ -125,11 +125,13 @@ describe('StartRequestSchema', () => {
 
 describe('ResumeRequestSchema', () => {
   const validUUID = '123e4567-e89b-12d3-a456-426614174000';
+  const validProblem = 'This is a valid problem description for testing the resume endpoint';
 
   describe('valid inputs', () => {
-    it('accepts valid runId and answers', () => {
+    it('accepts valid runId, problem, and answers', () => {
       const result = ResumeRequestSchema.safeParse({
         runId: validUUID,
+        problem: validProblem,
         answers: [
           { questionId: 'q1', answer: 'Yes' }
         ]
@@ -141,6 +143,7 @@ describe('ResumeRequestSchema', () => {
     it('accepts multiple answers', () => {
       const result = ResumeRequestSchema.safeParse({
         runId: validUUID,
+        problem: validProblem,
         answers: [
           { questionId: 'q1', answer: 'Yes' },
           { questionId: 'q2', answer: 'About 1000 per day' }
@@ -152,12 +155,29 @@ describe('ResumeRequestSchema', () => {
         expect(result.data.answers).toHaveLength(2);
       }
     });
+
+    it('accepts optional context', () => {
+      const result = ResumeRequestSchema.safeParse({
+        runId: validUUID,
+        problem: validProblem,
+        context: 'Additional context for stateless resume',
+        answers: [
+          { questionId: 'q1', answer: 'Yes' }
+        ]
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.context).toBe('Additional context for stateless resume');
+      }
+    });
   });
 
   describe('invalid inputs', () => {
     it('rejects invalid UUID format', () => {
       const result = ResumeRequestSchema.safeParse({
         runId: 'not-a-uuid',
+        problem: validProblem,
         answers: [{ questionId: 'q1', answer: 'Yes' }]
       });
 
@@ -170,6 +190,7 @@ describe('ResumeRequestSchema', () => {
     it('rejects empty answers array', () => {
       const result = ResumeRequestSchema.safeParse({
         runId: validUUID,
+        problem: validProblem,
         answers: []
       });
 
@@ -182,6 +203,7 @@ describe('ResumeRequestSchema', () => {
     it('rejects answer with empty questionId', () => {
       const result = ResumeRequestSchema.safeParse({
         runId: validUUID,
+        problem: validProblem,
         answers: [{ questionId: '', answer: 'Yes' }]
       });
 
@@ -191,6 +213,7 @@ describe('ResumeRequestSchema', () => {
     it('rejects answer with empty answer text', () => {
       const result = ResumeRequestSchema.safeParse({
         runId: validUUID,
+        problem: validProblem,
         answers: [{ questionId: 'q1', answer: '' }]
       });
 
@@ -199,6 +222,7 @@ describe('ResumeRequestSchema', () => {
 
     it('rejects missing runId', () => {
       const result = ResumeRequestSchema.safeParse({
+        problem: validProblem,
         answers: [{ questionId: 'q1', answer: 'Yes' }]
       });
 

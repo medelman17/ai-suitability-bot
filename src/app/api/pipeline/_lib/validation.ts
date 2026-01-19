@@ -57,12 +57,26 @@ export type Answer = z.infer<typeof AnswerSchema>;
 
 /**
  * Schema for POST /api/pipeline/resume request body.
+ *
+ * Note: In serverless environments, run state is not preserved between
+ * function invocations. The `problem` field allows stateless resume by
+ * restarting the pipeline with the provided answers pre-applied.
  */
 export const ResumeRequestSchema = z.object({
   /** Run ID of the suspended pipeline (UUID format) */
   runId: z
     .string()
     .uuid('Run ID must be a valid UUID'),
+  /** Original problem description (required for stateless serverless resume) */
+  problem: z
+    .string()
+    .min(10, 'Problem description must be at least 10 characters')
+    .max(5000, 'Problem description must not exceed 5000 characters'),
+  /** Optional additional context */
+  context: z
+    .string()
+    .max(10000, 'Context must not exceed 10000 characters')
+    .optional(),
   /** Answers to pending questions (at least one) */
   answers: z
     .array(AnswerSchema)
