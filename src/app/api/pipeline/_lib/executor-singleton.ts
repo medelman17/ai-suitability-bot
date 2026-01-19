@@ -111,14 +111,26 @@ class ExecutorManager {
     onEvent: EventCallback
   ): { handle: ExecutorHandle; unsubscribe: () => void } {
     const executor = this.getExecutor();
-    const handle = executor.startPipeline(input);
 
-    // Subscribe to events for this run
-    const unsubscribe = this.subscribe(handle.runId, onEvent);
+    // IMPORTANT: Generate runId and subscribe BEFORE starting the pipeline
+    // to avoid race condition where early events (pipeline:start) are lost.
+    // The executor will emit events synchronously during startPipeline().
+    const runId = crypto.randomUUID();
 
-    // Track active run for event routing
+    // Subscribe to events BEFORE starting (to catch pipeline:start)
+    const unsubscribe = this.subscribe(runId, onEvent);
+
+    // Set active run before starting
+    this.pushActiveRun(runId);
+
+    // Start the pipeline - this will emit events synchronously
+    const handle = executor.startPipelineWithId(runId, input);
+
+    // Wrap result promise to clean up active run tracking
     const originalResult = handle.result;
-    handle.result = this.wrapResultPromise(handle.runId, originalResult);
+    handle.result = originalResult.finally(() => {
+      this.popActiveRun(runId);
+    });
 
     return { handle, unsubscribe };
   }

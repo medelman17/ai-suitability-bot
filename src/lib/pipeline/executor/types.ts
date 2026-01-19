@@ -272,6 +272,15 @@ export interface PipelineExecutor {
   startPipeline(input: PipelineInput): ExecutorHandle;
 
   /**
+   * Start a new pipeline execution with a pre-generated run ID.
+   * Use this to subscribe to events BEFORE the pipeline starts.
+   * @param runId - Pre-generated run identifier
+   * @param input - Problem description and optional context
+   * @returns Handle for managing the execution
+   */
+  startPipelineWithId(runId: string, input: PipelineInput): ExecutorHandle;
+
+  /**
    * Resume a suspended pipeline with answers.
    * @param resumeInput - Run ID and answers to questions
    * @returns Handle for managing the resumed execution

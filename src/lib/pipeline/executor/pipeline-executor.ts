@@ -118,6 +118,15 @@ export class PipelineExecutorImpl implements PipelineExecutor {
    */
   startPipeline(input: PipelineInput): ExecutorHandle {
     const runId = crypto.randomUUID();
+    return this.startPipelineWithId(runId, input);
+  }
+
+  /**
+   * Start a new pipeline execution with a pre-generated run ID.
+   * This allows callers to subscribe to events BEFORE the pipeline starts,
+   * ensuring no events are missed (like pipeline:start).
+   */
+  startPipelineWithId(runId: string, input: PipelineInput): ExecutorHandle {
     const state = createInitialState(input);
 
     const runState: RunState = {
