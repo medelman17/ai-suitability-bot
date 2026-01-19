@@ -1,20 +1,20 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RotateCcw, AlertCircle, Sparkles, ArrowUp } from 'lucide-react';
-import { useScreener } from '@/hooks/use-screener';
-import { useAnnounce, getPhaseAnnouncement } from '@/lib/accessibility';
+import { usePipeline } from '@/hooks/use-pipeline';
+import {
+  useAnnounce,
+  getPipelinePhaseAnnouncement,
+  pipelinePhaseToLegacy,
+} from '@/lib/accessibility';
+import type { PipelinePhase } from '@/hooks/use-pipeline';
+import type { Answer } from '@/app/api/pipeline/_lib/validation';
 import {
   ProblemIntake,
-  ClarifyingQuestions,
   VerdictDisplay,
   VerdictSkeleton,
-  DimensionBreakdown,
-  AnalysisDetail,
-  AlternativesPanel,
-  ActionChecklist,
-  ScreeningLoader,
   PDFExportButton,
   Button,
   Card,
@@ -24,6 +24,12 @@ import {
   ProgressBar,
   ScrollReveal,
 } from '@/components';
+import {
+  StageIndicator,
+  DimensionProgress,
+  PipelineQuestions,
+  PipelineResults,
+} from '@/components/pipeline';
 
 // ============================================================================
 // PAGE TRANSITION VARIANTS
@@ -98,80 +104,216 @@ function ScrollToTopButton({ show }: { show: boolean }) {
 }
 
 // ============================================================================
+// ERROR DISPLAY
+// ============================================================================
+
+interface ErrorDisplayProps {
+  error: { code: string; message: string } | null;
+  onRetry?: () => void;
+}
+
+function ErrorDisplay({ error, onRetry }: ErrorDisplayProps) {
+  if (!error) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.98 }}
+      className="mb-6"
+    >
+      <Card
+        variant="outlined"
+        padding="md"
+        className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+      >
+        <div className="flex items-start gap-3">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', delay: 0.1 }}
+          >
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          </motion.div>
+          <div className="flex-1">
+            <p className="font-semibold text-red-800 dark:text-red-200">
+              Something went wrong
+            </p>
+            <p className="text-sm text-red-600 dark:text-red-300 mt-1">
+              {error.message}
+            </p>
+            {onRetry && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onRetry}
+                className="mt-2 text-red-600 dark:text-red-300"
+              >
+                Try Again
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// HELPER: Check if in analysis phases
+// ============================================================================
+
+const ANALYSIS_PHASES: PipelinePhase[] = [
+  'dimensions',
+  'verdict',
+  'secondary',
+  'synthesis',
+];
+
+function isAnalysisPhase(phase: PipelinePhase): boolean {
+  return ANALYSIS_PHASES.includes(phase);
+}
+
+// ============================================================================
 // MAIN PAGE
 // ============================================================================
 
 export default function Home() {
+  // Local state for problem input (not managed by usePipeline)
+  const [problem, setProblem] = useState('');
+
+  // Pipeline hook for streaming analysis
   const {
+    state,
     phase,
-    problem,
-    setProblem,
-    screeningResult,
-    answers,
-    evaluation,
-    isStreaming,
-    error,
-    submitProblem,
-    answerQuestion,
-    submitAnswers,
+    startPipeline,
+    resumePipeline,
     reset,
-  } = useScreener();
+    isLoading,
+    isSuspended,
+    isComplete,
+    hasError,
+    dimensions,
+    blockingQuestions,
+    progress,
+    error,
+  } = usePipeline();
 
   // Accessibility hooks
   const { announce } = useAnnounce();
   const previousPhaseRef = useRef(phase);
 
+  // Map pipeline phase to legacy phase for Header/ProgressBar
+  const legacyPhase = pipelinePhaseToLegacy(phase);
+
   // Announce phase changes to screen readers
   useEffect(() => {
     if (phase !== previousPhaseRef.current) {
-      const announcement = getPhaseAnnouncement(phase);
-      announce(announcement, phase === 'complete' ? 'assertive' : 'polite');
+      const announcement = getPipelinePhaseAnnouncement(phase);
+      const isUrgent = phase === 'complete' || phase === 'error';
+      announce(announcement, isUrgent ? 'assertive' : 'polite');
       previousPhaseRef.current = phase;
     }
   }, [phase, announce]);
 
-  // Announce verdict when evaluation completes
+  // Announce verdict when complete
   useEffect(() => {
-    if (phase === 'complete' && evaluation?.verdict) {
+    if (phase === 'complete' && state.verdict?.verdict) {
       const verdictLabels: Record<string, string> = {
         STRONG_FIT: 'Strong Fit - AI is well-suited for this problem',
         CONDITIONAL: 'Conditional - AI can work with appropriate guardrails',
         WEAK_FIT: 'Weak Fit - Consider alternatives first',
         NOT_RECOMMENDED: 'Not Recommended - AI is not the right approach',
       };
-      announce(`Verdict: ${verdictLabels[evaluation.verdict] || evaluation.verdict}`, 'assertive');
+      announce(
+        `Verdict: ${verdictLabels[state.verdict.verdict] || state.verdict.verdict}`,
+        'assertive'
+      );
     }
-  }, [phase, evaluation?.verdict, announce]);
+  }, [phase, state.verdict?.verdict, announce]);
 
   // Show scroll to top on results page
-  const showScrollTop = phase === 'complete' || phase === 'evaluating';
+  const showScrollTop = isComplete || isAnalysisPhase(phase);
+
+  // Handle problem submission
+  const handleSubmit = async () => {
+    if (problem.trim()) {
+      await startPipeline(problem);
+    }
+  };
+
+  // Handle question submission
+  const handleQuestionSubmit = async (answers: Answer[]) => {
+    await resumePipeline(answers);
+  };
+
+  // Handle reset
+  const handleReset = () => {
+    reset();
+    setProblem('');
+  };
+
+  // Build evaluation-compatible object for PDF export (adapter for legacy format)
+  const evaluationForExport = state.result
+    ? {
+        verdict: state.result.verdict,
+        confidence: state.result.confidence,
+        summary: state.result.summary,
+        dimensions: state.result.dimensions.map((d) => ({
+          id: d.id,
+          name: d.name,
+          score: d.score,
+          reasoning: d.reasoning,
+          evidence: d.evidence,
+          weight: d.weight,
+        })),
+        // Transform keyFactors to legacy favorableFactors format
+        // keyFactors use influence: 'strongly_positive' | 'positive' | 'neutral' | 'negative' | 'strongly_negative'
+        favorableFactors: state.result.keyFactors
+          .filter((f) => f.influence === 'positive' || f.influence === 'strongly_positive')
+          .map((f) => ({
+            factor: f.dimensionId.replace(/_/g, ' '),
+            explanation: f.note,
+          })),
+        riskFactors: state.result.risks.map((r) => ({
+          risk: r.risk,
+          severity: r.severity,
+          mitigation: r.mitigation,
+        })),
+        alternatives: state.result.alternatives,
+        // Convert null to undefined for legacy type compatibility
+        recommendedArchitecture: state.result.architecture ?? undefined,
+        questionsBeforeBuilding: state.result.questionsBeforeBuilding,
+        reasoning: state.result.reasoning,
+      }
+    : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Header - only show after intake phase */}
+      {/* Header - only show after idle phase */}
       <AnimatePresence>
-        {phase !== 'intake' && (
+        {phase !== 'idle' && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            <Header phase={phase} />
+            <Header phase={legacyPhase} />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Mobile Progress Bar */}
       <AnimatePresence>
-        {phase !== 'intake' && phase !== 'complete' && (
+        {phase !== 'idle' && phase !== 'complete' && phase !== 'error' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             className="lg:hidden px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800"
           >
-            <ProgressBar currentPhase={phase} />
+            <ProgressBar currentPhase={legacyPhase} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -181,46 +323,17 @@ export default function Home() {
         <Container size="lg" className="py-8 sm:py-12">
           {/* Error Display */}
           <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.98 }}
-                className="mb-6"
-              >
-                <Card
-                  variant="outlined"
-                  padding="md"
-                  className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
-                >
-                  <div className="flex items-start gap-3">
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: 'spring', delay: 0.1 }}
-                    >
-                      <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                    </motion.div>
-                    <div>
-                      <p className="font-semibold text-red-800 dark:text-red-200">
-                        Something went wrong
-                      </p>
-                      <p className="text-sm text-red-600 dark:text-red-300 mt-1">
-                        {error.message}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
+            {hasError && (
+              <ErrorDisplay error={error} onRetry={handleReset} />
             )}
           </AnimatePresence>
 
           {/* Phase Content */}
           <AnimatePresence mode="wait">
-            {/* Intake Phase */}
-            {phase === 'intake' && (
+            {/* Idle Phase (Intake) */}
+            {phase === 'idle' && (
               <motion.div
-                key="intake"
+                key="idle"
                 variants={pageVariants}
                 initial="initial"
                 animate="animate"
@@ -230,27 +343,48 @@ export default function Home() {
                 <ProblemIntake
                   value={problem}
                   onChange={setProblem}
-                  onSubmit={submitProblem}
+                  onSubmit={handleSubmit}
                   isLoading={false}
                 />
               </motion.div>
             )}
 
-            {/* Screening Phase */}
-            {phase === 'screening' && (
+            {/* Starting/Screening Phase */}
+            {(phase === 'starting' || phase === 'screening') && (
               <motion.div
                 key="screening"
                 variants={pageVariants}
                 initial="initial"
                 animate="animate"
                 exit="exit"
+                className="max-w-2xl mx-auto"
               >
-                <ScreeningLoader />
+                <Card variant="default" padding="lg">
+                  <div className="flex items-start gap-4 mb-6">
+                    <motion.div
+                      initial={{ rotate: 0 }}
+                      animate={{ rotate: [0, 15, -15, 0] }}
+                      transition={{ duration: 0.5, delay: 0.3 }}
+                      className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0"
+                    >
+                      <Sparkles className="w-5 h-5 text-white" />
+                    </motion.div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                        Analyzing
+                      </p>
+                      <p className="text-slate-800 dark:text-slate-200 line-clamp-2">
+                        {problem}
+                      </p>
+                    </div>
+                  </div>
+                  <StageIndicator currentPhase={phase} progress={progress} />
+                </Card>
               </motion.div>
             )}
 
-            {/* Questions Phase */}
-            {phase === 'questions' && screeningResult && (
+            {/* Suspended Phase (Questions) */}
+            {isSuspended && blockingQuestions.length > 0 && (
               <motion.div
                 key="questions"
                 variants={pageVariants}
@@ -258,21 +392,19 @@ export default function Home() {
                 animate="animate"
                 exit="exit"
               >
-                <ClarifyingQuestions
-                  questions={screeningResult.clarifyingQuestions}
-                  answers={answers}
-                  partialInsights={screeningResult.partialInsights}
-                  onAnswer={answerQuestion}
-                  onSubmit={submitAnswers}
-                  isLoading={false}
+                <PipelineQuestions
+                  questions={blockingQuestions}
+                  onSubmit={handleQuestionSubmit}
+                  isLoading={isLoading}
+                  stage={state.suspendedStage === 'screening' ? 'screening' : 'dimension'}
                 />
               </motion.div>
             )}
 
-            {/* Evaluating / Complete Phase */}
-            {(phase === 'evaluating' || phase === 'complete') && (
+            {/* Analysis Phases (Dimensions, Verdict, Secondary, Synthesis) */}
+            {isAnalysisPhase(phase) && (
               <motion.div
-                key="results"
+                key="analysis"
                 variants={pageVariants}
                 initial="initial"
                 animate="animate"
@@ -308,130 +440,105 @@ export default function Home() {
                     </Card>
                   </motion.div>
 
-                  {/* Verdict */}
+                  {/* Stage Indicator (Compact) */}
                   <motion.div variants={staggerItemVariants}>
-                    {evaluation?.verdict ? (
-                      <VerdictDisplay
-                        verdict={evaluation.verdict}
-                        confidence={evaluation.confidence || 0}
-                        summary={evaluation.summary || ''}
-                        isStreaming={isStreaming && !evaluation.summary}
-                      />
-                    ) : (
-                      isStreaming && <VerdictSkeleton />
-                    )}
+                    <StageIndicator currentPhase={phase} progress={progress} compact />
                   </motion.div>
 
-                  {/* Dimension Breakdown - with scroll reveal */}
-                  {evaluation?.dimensions && evaluation.dimensions.length > 0 && (
-                    <ScrollReveal direction="up" delay={0.1}>
-                      <DimensionBreakdown
-                        dimensions={evaluation.dimensions.filter(
-                          (d): d is NonNullable<typeof d> => d !== undefined
-                        )}
+                  {/* Dimension Progress (during dimension phase) */}
+                  {dimensions.length > 0 && (
+                    <motion.div variants={staggerItemVariants}>
+                      <DimensionProgress
+                        dimensions={dimensions}
+                        currentDimensionId={state.currentDimension}
+                        progress={state.dimensionProgress}
                       />
-                    </ScrollReveal>
+                    </motion.div>
                   )}
 
-                  {/* Analysis Details - with scroll reveal */}
-                  {(evaluation?.favorableFactors || evaluation?.riskFactors) && (
-                    <ScrollReveal direction="up" delay={0.15}>
-                      <AnalysisDetail
-                        favorableFactors={(evaluation.favorableFactors || []).filter(
-                          (f): f is NonNullable<typeof f> => f !== undefined
-                        )}
-                        riskFactors={(evaluation.riskFactors || []).filter(
-                          (r): r is NonNullable<typeof r> => r !== undefined
-                        )}
-                        recommendedArchitecture={evaluation.recommendedArchitecture}
+                  {/* Verdict (when available during streaming) */}
+                  {state.verdict && (
+                    <motion.div variants={staggerItemVariants}>
+                      <VerdictDisplay
+                        verdict={state.verdict.verdict!}
+                        confidence={state.verdict.confidence || 0}
+                        summary={state.verdict.summary || ''}
+                        isStreaming={!state.verdict.summary}
                       />
-                    </ScrollReveal>
+                    </motion.div>
                   )}
 
-                  {/* Alternatives - with scroll reveal */}
-                  {evaluation?.alternatives && evaluation.alternatives.length > 0 && (
-                    <ScrollReveal direction="up" delay={0.2}>
-                      <AlternativesPanel
-                        alternatives={evaluation.alternatives.filter(
-                          (a): a is NonNullable<typeof a> => a !== undefined
-                        )}
-                      />
-                    </ScrollReveal>
+                  {/* Show skeleton while waiting for verdict */}
+                  {!state.verdict && phase === 'verdict' && (
+                    <motion.div variants={staggerItemVariants}>
+                      <VerdictSkeleton />
+                    </motion.div>
                   )}
+                </motion.div>
+              </motion.div>
+            )}
 
-                  {/* Action Checklist - with scroll reveal */}
-                  {evaluation?.questionsBeforeBuilding &&
-                    evaluation.questionsBeforeBuilding.length > 0 && (
-                      <ScrollReveal direction="up" delay={0.25}>
-                        <ActionChecklist
-                          questions={evaluation.questionsBeforeBuilding.filter(
-                            (q): q is NonNullable<typeof q> => q !== undefined
-                          )}
-                        />
-                      </ScrollReveal>
-                    )}
+            {/* Complete Phase */}
+            {isComplete && state.result && (
+              <motion.div
+                key="complete"
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+              >
+                <motion.div
+                  variants={staggerContainerVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="space-y-6"
+                >
+                  {/* Problem Summary Card */}
+                  <motion.div variants={staggerItemVariants}>
+                    <Card variant="ghost" padding="md">
+                      <div className="flex items-start gap-3">
+                        <motion.div
+                          initial={{ rotate: 0 }}
+                          animate={{ rotate: [0, 15, -15, 0] }}
+                          transition={{ duration: 0.5, delay: 0.3 }}
+                          className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0"
+                        >
+                          <Sparkles className="w-4 h-4 text-white" />
+                        </motion.div>
+                        <div>
+                          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                            Analysis Complete
+                          </p>
+                          <p className="text-slate-800 dark:text-slate-200 line-clamp-2">
+                            {problem}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
 
-                  {/* Full Reasoning (Collapsible) - with scroll reveal */}
-                  {evaluation?.reasoning && phase === 'complete' && (
-                    <ScrollReveal direction="up" delay={0.3}>
-                      <Card variant="default" padding="none">
-                        <details className="group">
-                          <summary className="px-6 py-4 cursor-pointer font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between">
-                            <span>Full Analysis Reasoning</span>
-                            <motion.span
-                              className="text-slate-400"
-                              initial={false}
-                              animate={{ rotate: 0 }}
-                              whileHover={{ scale: 1.1 }}
-                            >
-                              <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
-                                className="group-open:rotate-180 transition-transform duration-200"
-                              >
-                                <path
-                                  fillRule="evenodd"
-                                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                  clipRule="evenodd"
-                                />
-                              </svg>
-                            </motion.span>
-                          </summary>
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="px-6 pb-6 pt-2 border-t border-slate-100 dark:border-slate-800"
-                          >
-                            <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap text-sm leading-relaxed">
-                              {evaluation.reasoning}
-                            </p>
-                          </motion.div>
-                        </details>
-                      </Card>
-                    </ScrollReveal>
-                  )}
+                  {/* Pipeline Results */}
+                  <PipelineResults result={state.result} isStreaming={false} />
 
                   {/* Action Buttons */}
-                  {phase === 'complete' && evaluation && (
-                    <ScrollReveal direction="up" delay={0.35}>
-                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+                  <ScrollReveal direction="up" delay={0.35}>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+                      {evaluationForExport && (
                         <PDFExportButton
                           problem={problem}
-                          evaluation={evaluation}
+                          evaluation={evaluationForExport}
                         />
-                        <Button
-                          variant="secondary"
-                          size="lg"
-                          onClick={reset}
-                          leftIcon={<RotateCcw className="w-4 h-4" />}
-                        >
-                          Analyze Another Problem
-                        </Button>
-                      </div>
-                    </ScrollReveal>
-                  )}
+                      )}
+                      <Button
+                        variant="secondary"
+                        size="lg"
+                        onClick={handleReset}
+                        leftIcon={<RotateCcw className="w-4 h-4" />}
+                      >
+                        Analyze Another Problem
+                      </Button>
+                    </div>
+                  </ScrollReveal>
                 </motion.div>
               </motion.div>
             )}
