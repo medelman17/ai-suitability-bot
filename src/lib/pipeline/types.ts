@@ -17,6 +17,20 @@ import type { DimensionId as ExistingDimensionId } from '../dimensions';
 // Re-export the DimensionId type from dimensions.ts for consistency
 export type DimensionId = ExistingDimensionId;
 
+/** All valid dimension IDs as a tuple for Zod enum */
+const DIMENSION_IDS = [
+  'task_determinism',
+  'error_tolerance',
+  'data_availability',
+  'evaluation_clarity',
+  'edge_case_risk',
+  'human_oversight_cost',
+  'rate_of_change'
+] as const;
+
+/** Zod schema for DimensionId validation */
+export const DimensionIdSchema = z.enum(DIMENSION_IDS);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PIPELINE STAGES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -186,7 +200,7 @@ export const FollowUpQuestionSchema = z.object({
   priority: z.enum(['blocking', 'helpful', 'optional']),
   source: z.object({
     stage: z.enum(['screening', 'dimension']),
-    dimensionId: z.string().optional()
+    dimensionId: DimensionIdSchema.optional()
   }),
   currentAssumption: z.string().optional(),
   suggestedOptions: z.array(QuestionOptionSchema).optional()
@@ -227,7 +241,7 @@ export interface DimensionAnalysis {
 
 /** Zod schema for DimensionAnalysis validation */
 export const DimensionAnalysisSchema = z.object({
-  id: z.string(),
+  id: DimensionIdSchema,
   name: z.string(),
   score: DimensionScoreSchema,
   confidence: z.number().min(0).max(1),
@@ -282,7 +296,7 @@ export interface VerdictResult {
 
 /** Zod schema for VerdictKeyFactor */
 export const VerdictKeyFactorSchema = z.object({
-  dimensionId: z.string(),
+  dimensionId: DimensionIdSchema,
   influence: z.enum(['strongly_positive', 'positive', 'neutral', 'negative', 'strongly_negative']),
   note: z.string()
 });
@@ -351,12 +365,12 @@ export interface ScreeningOutput {
 export const PartialInsightSchema = z.object({
   insight: z.string(),
   confidence: z.number().min(0).max(1),
-  relevantDimension: z.string()
+  relevantDimension: DimensionIdSchema
 });
 
 /** Zod schema for DimensionPriority */
 export const DimensionPrioritySchema = z.object({
-  dimensionId: z.string(),
+  dimensionId: DimensionIdSchema,
   priority: z.enum(['high', 'medium', 'low']),
   reason: z.string()
 });
@@ -397,7 +411,7 @@ export const RiskFactorSchema = z.object({
   severity: z.enum(['low', 'medium', 'high']),
   likelihood: z.enum(['low', 'medium', 'high']),
   mitigation: z.string().optional(),
-  relatedDimensions: z.array(z.string())
+  relatedDimensions: z.array(DimensionIdSchema)
 });
 
 /**

@@ -41,6 +41,15 @@ import {
 
 import { type WorkflowState, createInitialState, assembleResult } from './state';
 
+// Import analyzers
+import {
+  analyzeScreening,
+  analyzeAllDimensions,
+  calculateVerdict,
+  runSecondaryAnalyses,
+  synthesizeReasoning
+} from './analyzers';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // WORKFLOW STATE SCHEMA
 // ═══════════════════════════════════════════════════════════════════════════
@@ -143,36 +152,36 @@ export const screenerStep = createStep({
   resumeSchema: ResumeWithAnswersSchema,
   stateSchema: WorkflowStateSchema,
   execute: async ({ inputData, resumeData, suspend, setState, state, runId }) => {
-    // TODO: Implement actual screening logic with AI
-    // This is a placeholder showing the structure
+    // Get current answers from state or initialize empty
+    let currentAnswers = state?.answers || {};
 
-    // If we were resumed with answers, incorporate them into state
+    // If we were resumed with answers, incorporate them
     if (resumeData?.answers && state) {
-      const updatedAnswers = { ...state.answers };
+      const updatedAnswers = { ...currentAnswers };
       for (const answer of resumeData.answers) {
         updatedAnswers[answer.questionId] = answer;
       }
+      currentAnswers = updatedAnswers;
       setState({ ...state, answers: updatedAnswers });
     }
 
-    // Placeholder screening result
-    const screening: ScreeningOutput = {
-      canEvaluate: true,
-      clarifyingQuestions: [],
-      partialInsights: [],
-      preliminarySignal: 'uncertain',
-      dimensionPriorities: []
-    };
+    // Call the AI-powered screening analyzer
+    const screening = await analyzeScreening(inputData, currentAnswers);
 
     // Check if we need to suspend for blocking questions
     const blockingQuestions = screening.clarifyingQuestions.filter(
       (q) => q.priority === 'blocking'
     );
 
-    if (blockingQuestions.length > 0) {
+    // Only suspend if we have blocking questions that haven't been answered yet
+    const unansweredBlockingQuestions = blockingQuestions.filter(
+      (q) => !currentAnswers[q.id]
+    );
+
+    if (unansweredBlockingQuestions.length > 0) {
       // Suspend and wait for answers
       await suspend({
-        questions: blockingQuestions,
+        questions: unansweredBlockingQuestions,
         stage: 'screening' as const
       });
 
@@ -211,27 +220,38 @@ export const dimensionsStep = createStep({
   resumeSchema: ResumeWithAnswersSchema,
   stateSchema: WorkflowStateSchema,
   execute: async ({ inputData, resumeData, suspend, setState, state }) => {
-    // TODO: Implement actual dimension analysis with AI
-    // This is a placeholder showing the structure
+    // Get current answers from state or initialize empty
+    let currentAnswers = state?.answers || {};
 
     // If we were resumed with answers, incorporate them
     if (resumeData?.answers && state) {
-      const updatedAnswers = { ...state.answers };
+      const updatedAnswers = { ...currentAnswers };
       for (const answer of resumeData.answers) {
         updatedAnswers[answer.questionId] = answer;
       }
+      currentAnswers = updatedAnswers;
       setState({ ...state, answers: updatedAnswers });
     }
 
-    const dimensions: Record<string, DimensionAnalysis> = {};
+    // Get input and screening from state
+    const input = state?.input || { problem: '' };
+    const screening = inputData.screening;
+
+    // Call the AI-powered dimension analyzers (runs all 7 in parallel)
+    const dimensions = await analyzeAllDimensions(input, screening, currentAnswers);
 
     // Check if we need to suspend for blocking questions
     const allQuestions = Object.values(dimensions).flatMap((d) => d.infoGaps);
     const blockingQuestions = allQuestions.filter((q) => q.priority === 'blocking');
 
-    if (blockingQuestions.length > 0) {
+    // Only suspend if we have blocking questions that haven't been answered yet
+    const unansweredBlockingQuestions = blockingQuestions.filter(
+      (q) => !currentAnswers[q.id]
+    );
+
+    if (unansweredBlockingQuestions.length > 0) {
       await suspend({
-        questions: blockingQuestions,
+        questions: unansweredBlockingQuestions,
         stage: 'dimensions' as const
       });
 
@@ -265,16 +285,13 @@ export const verdictStep = createStep({
   outputSchema: VerdictStepOutputSchema,
   stateSchema: WorkflowStateSchema,
   execute: async ({ inputData, setState, state }) => {
-    // TODO: Implement actual verdict calculation with AI
-    // This is a placeholder showing the structure
+    // Get input and screening from state
+    const input = state?.input || { problem: '' };
+    const screening = state?.screening || null;
+    const dimensions = inputData.dimensions;
 
-    const verdict: VerdictResult = {
-      verdict: 'CONDITIONAL',
-      confidence: 0.7,
-      summary: 'Placeholder verdict',
-      reasoning: 'Placeholder reasoning',
-      keyFactors: []
-    };
+    // Call the AI-powered verdict calculator
+    const verdict = await calculateVerdict(input, screening, dimensions);
 
     // Update state with verdict
     if (state) {
@@ -304,13 +321,15 @@ export const secondaryStep = createStep({
   outputSchema: SecondaryStepOutputSchema,
   stateSchema: WorkflowStateSchema,
   execute: async ({ inputData, setState, state }) => {
-    // TODO: Implement actual secondary analyses with AI
-    // This is a placeholder showing the structure
+    // Get required data from state
+    const input = state?.input || { problem: '' };
+    const dimensions = state?.dimensions || {};
+    const verdict = inputData.verdict;
 
-    const risks: RiskFactor[] = [];
-    const alternatives: Alternative[] = [];
-    const architecture: RecommendedArchitecture | null = null;
-    const questionsBeforeBuilding: PreBuildQuestion[] = [];
+    // Run all secondary analyses in parallel
+    const secondaryResult = await runSecondaryAnalyses(input, dimensions, verdict);
+
+    const { risks, alternatives, architecture, questionsBeforeBuilding } = secondaryResult;
 
     // Update state with secondary results
     if (state) {
@@ -374,12 +393,31 @@ export const synthesisStep = createStep({
   outputSchema: SynthesisStepOutputSchema,
   stateSchema: WorkflowStateSchema,
   execute: async ({ inputData, setState, state, runId }) => {
-    // TODO: Implement actual synthesis with AI
-    // This is a placeholder showing the structure
+    // Build synthesis input from accumulated state
+    const synthesisInput = {
+      input: state?.input || { problem: '' },
+      screening: state?.screening || null,
+      dimensions: state?.dimensions || {},
+      answers: state?.answers || {},
+      verdict: state?.verdict || {
+        verdict: 'NOT_RECOMMENDED' as const,
+        confidence: 0,
+        summary: '',
+        reasoning: '',
+        keyFactors: []
+      },
+      risks: inputData.risks,
+      alternatives: inputData.alternatives,
+      architecture: inputData.architecture,
+      questionsBeforeBuilding: inputData.questionsBeforeBuilding
+    };
 
-    const reasoning = 'Placeholder final reasoning...';
+    // Call the AI-powered synthesizer
+    const synthesisOutput = await synthesizeReasoning(synthesisInput);
 
-    // Mark completion time and update state
+    const reasoning = synthesisOutput.reasoning;
+
+    // Mark completion time and update state with synthesis output
     if (state) {
       setState({
         ...state,
