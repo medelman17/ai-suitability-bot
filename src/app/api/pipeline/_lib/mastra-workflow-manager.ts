@@ -39,8 +39,9 @@ import { events as pipelineEvents } from '@/lib/pipeline/events';
 
 /**
  * Event callback for pipeline events.
+ * Can be sync or async - async callbacks will be awaited.
  */
-type EventCallback = (event: PipelineEvent) => void;
+type EventCallback = (event: PipelineEvent) => void | Promise<void>;
 
 /**
  * Result status from workflow execution.
@@ -134,7 +135,7 @@ export class MastraWorkflowManager {
 
     // Emit pipeline:start event immediately
     debug('startPipeline', 'Emitting pipeline:start event');
-    onEvent(pipelineEvents.pipelineStart(runId));
+    await onEvent(pipelineEvents.pipelineStart(runId));
 
     // Start streaming execution
     debug('startPipeline', 'Starting streamVNext');
@@ -175,7 +176,7 @@ export class MastraWorkflowManager {
     const run = await workflow.createRunAsync({ runId });
 
     // Emit pipeline:resumed event
-    onEvent(pipelineEvents.pipelineResumed(runId, stepId));
+    await onEvent(pipelineEvents.pipelineResumed(runId, stepId));
 
     // Resume with answers as resumeData
     // Type assertion needed because Mastra infers resumeData type from workflow input,
@@ -257,7 +258,7 @@ export class MastraWorkflowManager {
           if (isPipelineEventEnvelope(chunk.payload.output)) {
             const event = chunk.payload.output.event;
             debug('processStream', `Emitting pipeline event: ${event.type}`);
-            onEvent(event);
+            await onEvent(event);
           } else {
             debug('processStream', 'Output is NOT a pipeline event envelope', {
               output: chunk.payload.output
@@ -278,7 +279,7 @@ export class MastraWorkflowManager {
         if (chunk.type === 'workflow-finish' && chunk.payload?.error) {
           const errorMessage = chunk.payload.error?.message || 'Unknown workflow error';
           debug('processStream', 'Workflow finished with error', { errorMessage });
-          onEvent(
+          await onEvent(
             pipelineEvents.pipelineError('WORKFLOW_ERROR', errorMessage, false)
           );
           return {
@@ -324,7 +325,11 @@ export class MastraWorkflowManager {
       });
 
       // Emit error event
-      onEvent(pipelineEvents.pipelineError('STREAM_ERROR', errorMessage, false));
+      try {
+        await onEvent(pipelineEvents.pipelineError('STREAM_ERROR', errorMessage, false));
+      } catch {
+        // Ignore callback errors during error handling
+      }
 
       return {
         status: 'failed',
