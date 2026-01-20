@@ -13,6 +13,18 @@
 
 import type { PipelineEvent } from '../events';
 
+// Debug logging helper
+const DEBUG = true;
+function debug(context: string, message: string, data?: unknown): void {
+  if (!DEBUG) return;
+  const timestamp = new Date().toISOString();
+  if (data !== undefined) {
+    console.log(`[${timestamp}] [event-emitter] [${context}] ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`[${timestamp}] [event-emitter] [${context}] ${message}`);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -67,9 +79,12 @@ export async function emitPipelineEvent(
   writer: StepWriter | undefined,
   event: PipelineEvent
 ): Promise<void> {
+  debug('emitPipelineEvent', `Emitting event: ${event.type}`, { hasWriter: !!writer });
+
   if (!writer) {
     // Not streaming - skip event emission
     // This allows the same step code to work both with and without streaming
+    debug('emitPipelineEvent', 'No writer available - skipping event emission');
     return;
   }
 
@@ -79,7 +94,16 @@ export async function emitPipelineEvent(
     timestamp: Date.now()
   };
 
-  await writer.write(envelope);
+  debug('emitPipelineEvent', 'Writing envelope to writer', { eventType: event.type });
+  try {
+    await writer.write(envelope);
+    debug('emitPipelineEvent', 'Successfully wrote envelope to writer');
+  } catch (error) {
+    debug('emitPipelineEvent', 'ERROR writing to writer', {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    throw error;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

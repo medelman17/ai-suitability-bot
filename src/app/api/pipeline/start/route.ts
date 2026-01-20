@@ -89,6 +89,18 @@ export async function POST(request: Request): Promise<Response> {
   return handleLegacyExecutor(request, { problem, context });
 }
 
+// Debug logging helper
+const DEBUG = true;
+function debug(context: string, message: string, data?: unknown): void {
+  if (!DEBUG) return;
+  const timestamp = new Date().toISOString();
+  if (data !== undefined) {
+    console.log(`[${timestamp}] [start/route] [${context}] ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`[${timestamp}] [start/route] [${context}] ${message}`);
+  }
+}
+
 /**
  * Handle pipeline start using Mastra native workflow execution.
  */
@@ -96,34 +108,51 @@ async function handleMastraNative(
   request: Request,
   input: { problem: string; context?: string }
 ): Promise<Response> {
+  debug('handleMastraNative', 'Starting Mastra native handler', { input });
+
   const encoder = new TextEncoder();
   const manager = getMastraWorkflowManager();
 
   try {
+    debug('handleMastraNative', 'Creating ReadableStream');
+
     const stream = new ReadableStream({
       async start(controller) {
+        debug('handleMastraNative', 'ReadableStream start() called');
+
         try {
+          let eventCount = 0;
+
           // Start the pipeline with event callback
-          // runId is used for internal tracking; events include it already
+          debug('handleMastraNative', 'Calling manager.startPipeline');
           const { result } = await manager.startPipeline(
             input,
             (event) => {
-              controller.enqueue(encoder.encode(formatSSEEvent(event)));
+              eventCount++;
+              debug('handleMastraNative', `Received event #${eventCount}: ${event.type}`);
+              const formatted = formatSSEEvent(event);
+              debug('handleMastraNative', `Enqueueing SSE event`, { eventType: event.type, formattedLength: formatted.length });
+              controller.enqueue(encoder.encode(formatted));
             }
           );
+          debug('handleMastraNative', 'manager.startPipeline returned, awaiting result');
 
           // Wait for completion
+          debug('handleMastraNative', 'Waiting for result promise');
           const finalResult = await result;
+          debug('handleMastraNative', 'Final result received', finalResult);
 
           // Send final status
           switch (finalResult.status) {
             case 'success':
             case 'suspended':
             case 'cancelled':
+              debug('handleMastraNative', `Sending done event for status: ${finalResult.status}`);
               controller.enqueue(encoder.encode(formatDoneEvent()));
               break;
 
             case 'failed':
+              debug('handleMastraNative', 'Pipeline failed', finalResult.error);
               if (finalResult.error) {
                 controller.enqueue(encoder.encode(formatSSEError({
                   message: finalResult.error.message,
@@ -132,16 +161,24 @@ async function handleMastraNative(
               }
               break;
           }
+
+          debug('handleMastraNative', `Stream complete. Total events sent: ${eventCount}`);
         } catch (error) {
+          debug('handleMastraNative', 'EXCEPTION in stream start', {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+          });
           console.error('[/api/pipeline/start] Mastra native error:', error);
           const message = error instanceof Error ? error.message : 'Pipeline execution failed';
           controller.enqueue(encoder.encode(formatSSEError(message)));
         } finally {
+          debug('handleMastraNative', 'Closing controller');
           controller.close();
         }
       }
     });
 
+    debug('handleMastraNative', 'Returning SSE response');
     return createSSEResponse(stream);
   } catch (error) {
     console.error('[/api/pipeline/start] Unexpected error:', error);

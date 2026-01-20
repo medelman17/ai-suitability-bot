@@ -152,6 +152,18 @@ const SynthesisStepOutputSchema = z.object({
  * 4. May suspend to collect answers for blocking questions
  * 5. Emits events for real-time progress updates
  */
+// Debug logging for workflow steps
+const DEBUG_WORKFLOW = true;
+function debugStep(step: string, message: string, data?: unknown): void {
+  if (!DEBUG_WORKFLOW) return;
+  const timestamp = new Date().toISOString();
+  if (data !== undefined) {
+    console.log(`[${timestamp}] [workflow/${step}] ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`[${timestamp}] [workflow/${step}] ${message}`);
+  }
+}
+
 export const screenerStep = createStep({
   id: 'screener',
   description: 'Analyzes problem for evaluability and surfaces clarifying questions',
@@ -161,12 +173,23 @@ export const screenerStep = createStep({
   resumeSchema: ResumeWithAnswersSchema,
   stateSchema: WorkflowStateSchema,
   execute: async ({ inputData, resumeData, suspend, setState, state, runId, writer }) => {
+    debugStep('screener', 'Step execute started', {
+      hasInputData: !!inputData,
+      hasResumeData: !!resumeData,
+      hasState: !!state,
+      runId,
+      hasWriter: !!writer,
+      writerType: writer ? typeof writer : 'undefined'
+    });
+
     // Cast writer to our StepWriter type (Mastra provides this when streaming)
     const stepWriter = writer as StepWriter | undefined;
 
+    debugStep('screener', 'Emitting stage events');
     // Emit stage transition event
     await emitPipelineEvent(stepWriter, events.pipelineStage('screening'));
     await emitPipelineEvent(stepWriter, events.screeningStart());
+    debugStep('screener', 'Stage events emitted');
 
     // Get current answers from state or initialize empty
     let currentAnswers = state?.answers || {};

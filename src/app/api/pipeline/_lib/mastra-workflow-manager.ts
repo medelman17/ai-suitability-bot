@@ -12,6 +12,18 @@
  * @module api/pipeline/_lib/mastra-workflow-manager
  */
 
+// Debug logging helper
+const DEBUG = true;
+function debug(context: string, message: string, data?: unknown): void {
+  if (!DEBUG) return;
+  const timestamp = new Date().toISOString();
+  if (data !== undefined) {
+    console.log(`[${timestamp}] [MastraWorkflowManager] [${context}] ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`[${timestamp}] [MastraWorkflowManager] [${context}] ${message}`);
+  }
+}
+
 import { mastra } from '@/mastra';
 import {
   type PipelineEvent,
@@ -111,22 +123,31 @@ export class MastraWorkflowManager {
     input: PipelineInput,
     onEvent: EventCallback
   ): Promise<StartPipelineResult> {
+    debug('startPipeline', 'Starting pipeline', { input });
+
     const workflow = mastra.getWorkflow('ai-suitability-analysis');
+    debug('startPipeline', 'Got workflow reference');
+
     const run = await workflow.createRunAsync();
     const runId = run.runId;
+    debug('startPipeline', 'Created run', { runId });
 
     // Emit pipeline:start event immediately
+    debug('startPipeline', 'Emitting pipeline:start event');
     onEvent(pipelineEvents.pipelineStart(runId));
 
     // Start streaming execution
+    debug('startPipeline', 'Starting streamVNext');
     const stream = run.streamVNext({
       inputData: input,
       closeOnSuspend: true // Close stream when workflow suspends
     });
+    debug('startPipeline', 'streamVNext returned, processing stream');
 
     // Process stream in the background and return immediately
     const result = this.processStream(stream, runId, onEvent);
 
+    debug('startPipeline', 'Returning handle', { runId });
     return { runId, result };
   }
 
@@ -188,7 +209,7 @@ export class MastraWorkflowManager {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       result: Promise<any>;
     },
-    _runId: string, // Kept for future error reporting
+    runId: string,
     onEvent: EventCallback
   ): Promise<{
     status: WorkflowResultStatus;
@@ -197,22 +218,50 @@ export class MastraWorkflowManager {
   }> {
     let lastStepId: string | undefined;
     let hasSuspended = false;
+    let chunkCount = 0;
+
+    debug('processStream', `Starting stream processing for run ${runId}`);
 
     try {
+      debug('processStream', 'Entering async iteration over stream');
+
       for await (const rawChunk of stream) {
+        chunkCount++;
+        debug('processStream', `Received chunk #${chunkCount}`, {
+          type: rawChunk?.type,
+          hasPayload: !!rawChunk?.payload,
+          rawChunkKeys: rawChunk ? Object.keys(rawChunk) : []
+        });
+
         // Use type guard to safely handle stream chunks
-        if (!isStreamChunk(rawChunk)) continue;
+        if (!isStreamChunk(rawChunk)) {
+          debug('processStream', `Chunk #${chunkCount} failed type guard, skipping`);
+          continue;
+        }
         const chunk = rawChunk;
 
         // Track which step we're in
         if (chunk.type === 'workflow-step-start' && chunk.payload?.stepName) {
           lastStepId = chunk.payload.stepName;
+          debug('processStream', `Step started: ${lastStepId}`);
         }
 
         // Extract our custom pipeline events from step outputs
         if (chunk.type === 'workflow-step-output' && chunk.payload?.output) {
+          debug('processStream', 'workflow-step-output received', {
+            outputType: typeof chunk.payload.output,
+            outputKeys: chunk.payload.output ? Object.keys(chunk.payload.output) : [],
+            isPipelineEnvelope: isPipelineEventEnvelope(chunk.payload.output)
+          });
+
           if (isPipelineEventEnvelope(chunk.payload.output)) {
-            onEvent(chunk.payload.output.event);
+            const event = chunk.payload.output.event;
+            debug('processStream', `Emitting pipeline event: ${event.type}`);
+            onEvent(event);
+          } else {
+            debug('processStream', 'Output is NOT a pipeline event envelope', {
+              output: chunk.payload.output
+            });
           }
         }
 
@@ -221,12 +270,14 @@ export class MastraWorkflowManager {
           chunk.type === 'workflow-step-result' &&
           chunk.payload?.status === 'suspended'
         ) {
+          debug('processStream', 'Workflow suspended', { stepId: lastStepId });
           hasSuspended = true;
         }
 
         // Handle workflow errors
         if (chunk.type === 'workflow-finish' && chunk.payload?.error) {
           const errorMessage = chunk.payload.error?.message || 'Unknown workflow error';
+          debug('processStream', 'Workflow finished with error', { errorMessage });
           onEvent(
             pipelineEvents.pipelineError('WORKFLOW_ERROR', errorMessage, false)
           );
@@ -235,26 +286,42 @@ export class MastraWorkflowManager {
             error: { code: 'WORKFLOW_ERROR', message: errorMessage }
           };
         }
+
+        // Log other chunk types for debugging
+        if (!['workflow-step-start', 'workflow-step-output', 'workflow-step-result', 'workflow-finish'].includes(chunk.type)) {
+          debug('processStream', `Other chunk type: ${chunk.type}`, chunk.payload);
+        }
       }
 
+      debug('processStream', `Stream iteration complete. Total chunks: ${chunkCount}`);
+
       // Check final result
+      debug('processStream', 'Awaiting stream.result');
       const finalResult = await stream.result;
+      debug('processStream', 'Final result received', finalResult);
 
       if (finalResult?.status === 'suspended' || hasSuspended) {
+        debug('processStream', 'Returning suspended status', { stepId: lastStepId });
         return { status: 'suspended', stepId: lastStepId };
       }
 
       if (finalResult?.error) {
         const errorMessage = finalResult.error?.message || 'Unknown error';
+        debug('processStream', 'Final result has error', { errorMessage });
         return {
           status: 'failed',
           error: { code: 'WORKFLOW_ERROR', message: errorMessage }
         };
       }
 
+      debug('processStream', 'Returning success status');
       return { status: 'success' };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Stream processing failed';
+      debug('processStream', 'EXCEPTION in stream processing', {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
 
       // Emit error event
       onEvent(pipelineEvents.pipelineError('STREAM_ERROR', errorMessage, false));
